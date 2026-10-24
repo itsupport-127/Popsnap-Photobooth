@@ -1,0 +1,80 @@
+{
+  "name": "popsnap-desktop",
+  "version": "1.0.0",
+  "description": "POPSNAP Photobox - Desktop App",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^38.4.0",
+    "electron-builder": "^26.0.20"
+  },
+  "build": {
+    "appId": "com.popsnap.photobox",
+    "productName": "POPSNAP",
+    "files": [
+      "main.js",
+      "preload.js",
+      "dslrBridge.js",
+      "pinPreload.js",
+      "pinWindow.html"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!db/**",
+          "!output/**",
+          "!uploads/**",
+          "!.env"
+        ]
+      },
+      {
+        "from": "../backend/node_modules",
+        "to": "backend/node_modules"
+      },
+      {
+        "from": "../frontend/dist",
+        "to": "frontend"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "POPSNAP"
+    },
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    }
+  },
+  "author": "POPSNAP"
+}

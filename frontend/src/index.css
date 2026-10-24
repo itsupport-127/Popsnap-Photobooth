@@ -1,0 +1,313 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================
+   Tema PopSnap (Papyrus Photo Jogja)
+   Warna tema (R G B). Bisa diganti runtime dari Admin > Pengaturan > Tampilan.
+     --pop-pink   = warna utama   (tombol, pil)      default merah  #E02843
+     --pop-purple = warna sekunder (latar kiosk)     default biru   #4082AE
+     --pop-dark   = warna tinta   (teks gelap/modal) default tinta  #181B23
+   ========================================================== */
+:root {
+  --pop-pink: 224 40 67;
+  --pop-purple: 64 130 174;
+  --pop-dark: 24 27 35;
+  --pop-on-pink: 255 255 255; /* Button Font Color */
+
+  /* Turunan dari warna sekunder -> gradasi latar ala tema */
+  --blue: rgb(var(--pop-purple));
+  --blue-light: color-mix(in srgb, rgb(var(--pop-purple)) 76%, white);
+  --blue-deep: color-mix(in srgb, rgb(var(--pop-purple)) 62%, black);
+  --red: rgb(var(--pop-pink));
+  --ink: rgb(var(--pop-dark));
+  --flash: #FFD23F;
+  --flash-ink: #3A2E00;
+  --slate: rgba(255, 255, 255, 0.72);
+  --line: rgba(255, 255, 255, 0.22);
+  --pop-shadow: 1px 5px 6.3px 1px rgba(0, 0, 0, 0.27);
+}
+
+* {
+  -webkit-user-select: none;
+  user-select: none;
+  box-sizing: border-box;
+}
+input, textarea, select { -webkit-user-select: text; user-select: text; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: "Plus Jakarta Sans Variable", system-ui, sans-serif;
+}
+
+/* ---------- Latar kiosk: gradasi biru + tekstur grain (seperti tema) ---------- */
+.kiosk-root {
+  position: relative;
+  background: linear-gradient(180deg, var(--blue-light) 0%, var(--blue) 45%, var(--blue-deep) 100%);
+  color: #fff;
+}
+/* semua layar kiosk transparan supaya gradasi + grain kelihatan */
+.kiosk-screen { position: relative; z-index: 1; background: transparent; color: #fff; }
+.kiosk-screen--dim { background: rgba(0, 0, 0, 0.2); }
+
+/* ---------- Komponen tema ---------- */
+@layer components {
+  .eyebrow { font-family: "Space Mono", monospace; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--flash); }
+  .display-hero { font-family: Fredoka, "Plus Jakarta Sans Variable", sans-serif; font-weight: 700; font-style: italic; line-height: 1.02; }
+  .display-h2 { font-weight: 800; font-style: italic; font-size: clamp(1.5rem, 4vw, 2.4rem); line-height: 1.1; }
+  .display-h3 { font-weight: 700; font-style: italic; font-size: clamp(1.15rem, 3vw, 1.6rem); line-height: 1.15; }
+
+  /* Tombol utama: pil merah, miring, bayangan lembut */
+  .btn-pop {
+    position: relative; font-weight: 700; font-style: italic;
+    border: 1px solid rgba(0,0,0,.5); border-radius: 9999px;
+    background: var(--red); color: rgb(var(--pop-on-pink));
+    box-shadow: var(--pop-shadow);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .btn-pop:active { transform: scale(.96); }
+  .btn-pop:disabled { opacity: .35; pointer-events: none; }
+  .btn-flash { background: var(--flash); color: var(--flash-ink); border-color: rgba(0,0,0,.35); }
+  .btn-outline { background: transparent; border: 2px solid #fff; color: #fff; box-shadow: none; }
+  .btn-ghost { background: transparent; border: none; color: var(--slate); text-decoration: underline; box-shadow: none; }
+
+  /* Pil informasi (HUD sesi foto) */
+  .pill { font-family: "Space Mono", monospace; font-size: .85rem; font-weight: 700; background: var(--red); color: rgb(var(--pop-on-pink)); border: 1px solid rgba(0,0,0,.4); border-radius: 9999px; padding: .5rem 1rem; box-shadow: 1px 5px 6.3px 1px rgba(0,0,0,.2); white-space: nowrap; }
+
+  /* Chip pilihan (filter, tab) */
+  .chip { font-weight: 700; border: 2px solid var(--line); background: transparent; color: #fff; border-radius: 9999px; }
+  .chip.is-active { background: var(--red); color: rgb(var(--pop-on-pink)); border-color: #000; box-shadow: var(--pop-shadow); }
+
+  /* Kartu putih (modal) */
+  .modal-card { background: #fff; color: var(--ink); border-radius: 28px; box-shadow: 1px 8px 24px rgba(0,0,0,.35); }
+
+  /* Kartu tipe template (desain "Pilih tipe template"): ukuran semua diturunkan dari lebar kartu --cw */
+  .type-row {
+    --cw: min(15.45vw, 27vh);
+    position: relative; z-index: 10;
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+    gap: calc(var(--cw) * 0.187);
+  }
+  @media (max-width: 899px), (max-aspect-ratio: 20/21) {
+    .type-row { --cw: min(36vw, 26vh); display: grid; grid-template-columns: repeat(2, var(--cw)); gap: calc(var(--cw) * 0.18); }
+  }
+  @media (max-aspect-ratio: 20/21) { .type-row { --cw: min(38vw, 24vh); } }
+  @media (min-aspect-ratio: 20/21) and (max-aspect-ratio: 23/20) { .type-row { --cw: min(30vw, 34vh); } }
+  .type-card {
+    position: relative; flex: none; width: var(--cw); aspect-ratio: 267.371 / 365.432; padding: 0;
+    background: var(--red); color: #fff; border: 1px solid #000;
+    border-radius: calc(var(--cw) * 0.2656);
+    box-shadow: var(--pop-shadow); transition: transform .15s ease;
+  }
+  .type-card:active { transform: scale(.97); }
+  .type-card::before, .pay-card::before { /* bintik pink halus seperti di desain */
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='267' height='365' viewBox='0 0 267 365'><filter id='n' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='0.4545 0.5263' numOctaves='3' seed='887' stitchTiles='stitch'/><feColorMatrix type='luminanceToAlpha'/><feComponentTransfer><feFuncA type='discrete' tableValues='1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0'/></feComponentTransfer><feComposite in2='SourceGraphic' operator='arithmetic' k1='0' k2='1' k3='0' k4='0' result='a'/><feFlood flood-color='rgb(255,180,180)' flood-opacity='0.53' result='f'/><feComposite in='f' in2='a' operator='in'/></filter><rect width='100%25' height='100%25' fill='black' filter='url(%23n)'/></svg>") center / cover no-repeat;
+  }
+  .type-card__upload { /* ikon unggahan admin: di area ikon yang sama dengan ikon desain (14%-74% tinggi kartu) */
+    position: absolute; left: 18%; top: 14%; width: 64%; height: 59.7%; object-fit: contain; pointer-events: none;
+  }
+  .type-card__icon { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .type-card__label {
+    position: absolute; left: 8.5%; width: 83.9%; bottom: 5.6%; box-sizing: border-box;
+    min-height: calc(var(--cw) * 0.1682); padding: calc(var(--cw) * 0.03) calc(var(--cw) * 0.04);
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    background: rgba(0, 0, 0, 0.1); border: 1px solid #FFC3C3; border-radius: 9999px;
+    font-size: calc(var(--cw) * 0.0849); font-weight: 700; font-style: italic; line-height: 1.2;
+  }
+
+  /* Layar daftar template (desain "Photostrip"): semua ukuran dalam satuan --u = 1px kanvas desain 1728x1117 */
+  .strip-screen { --sw: 1728; --sh: 1117; --u: min(calc(100vw / var(--sw)), calc(100vh / var(--sh))); }
+  @media (max-width: 899px) { .strip-screen { --u: calc(100vw / 1560); } }
+  /* Layar tegak (portrait): kanvas desain 1080x1800 (setiap layar punya tata letak portrait sendiri, dipilih lewat useShape) */
+  .strip-screen[data-shape="portrait"] { --sw: 1080; --sh: 1800; --u: min(calc(100vw / 1080), calc(100vh / 1800)); }
+  /* Layar kotak (square): kanvas desain 1200x1200 */
+  .strip-screen[data-shape="square"] { --sw: 1200; --sh: 1200; --u: min(calc(100vw / 1200), calc(100vh / 1200)); }
+  .strip-stage { position: absolute; left: 50%; top: 50%; z-index: 10; width: calc(var(--u) * var(--sw)); height: calc(var(--u) * var(--sh)); transform: translate(-50%, -50%); }
+  .strip-stage > * { position: absolute; }
+  .strip-logo { filter: drop-shadow(0 calc(var(--u) * 4) calc(var(--u) * 7.35) rgba(0, 0, 0, 0.31)); user-select: none; }
+  .strip-panel {
+    background: #FDB939; border: max(1px, calc(var(--u) * 2)) solid #000; box-sizing: border-box;
+    box-shadow: calc(var(--u) * 3) calc(var(--u) * 4) calc(var(--u) * 2) rgba(0, 0, 0, 0.59);
+  }
+  .strip-tray {
+    background: #fff; border: max(1px, calc(var(--u) * 2)) solid #000; box-sizing: border-box; overflow: hidden;
+    box-shadow: inset calc(var(--u) * 3) calc(var(--u) * 4) calc(var(--u) * 16) rgba(88, 88, 88, 0.75);
+  }
+  .strip-scroll { height: 100%; display: flex; align-items: flex-start; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; cursor: grab; touch-action: pan-x; }
+  .strip-scroll::-webkit-scrollbar { display: none; }
+  .strip-card { position: relative; flex: none; padding: 0; background: none; border: 0; border-radius: calc(var(--u) * 4); transition: transform .15s ease; }
+  .strip-card.is-picked { transform: scale(1.04); outline: calc(var(--u) * 5) solid var(--red); outline-offset: calc(var(--u) * 5); }
+  .strip-price { position: absolute; top: 100%; left: 0; right: 0; text-align: center; color: #181B23; font-family: "Space Mono", monospace; font-weight: 700; white-space: nowrap; }
+  .strip-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 12%; color: #55606E; font-style: italic; font-weight: 600; }
+  .strip-tabs { display: flex; align-items: center; justify-content: center; z-index: 2; }
+  .strip-tab { display: flex; align-items: center; box-sizing: border-box; border: max(1px, calc(var(--u) * 2)) solid #000; border-radius: 9999px; color: #000; font-style: italic; line-height: 1; white-space: nowrap; }
+  .strip-tab--title { position: relative; z-index: 2; background: #FDB533; font-weight: 800; }
+  .strip-tab--sub { background: #FFEAC5; font-weight: 700; max-width: calc(var(--u) * 900); overflow: hidden; text-overflow: ellipsis; }
+  .strip-btn {
+    background: var(--red); color: rgb(var(--pop-on-pink)); border: 1px solid #000; border-radius: 9999px;
+    font-weight: 800; font-style: italic; letter-spacing: .02em; box-shadow: 0 calc(var(--u) * 4) calc(var(--u) * 2) rgba(0, 0, 0, 0.25);
+    transition: transform .12s ease;
+  }
+  .strip-btn:active { transform: scale(.96); }
+  .start-art { position: absolute; background: transparent; border: 0; padding: 0; cursor: pointer; transition: transform .12s ease; }
+  .start-art:active { transform: scale(.96); }
+  .strip-btn--next { background: #FDB533; color: #3A2E00; }
+
+  /* Layar pilih metode bayar (desain "Payment"): memakai panggung .strip-stage yang sama */
+  .pay-title {
+    display: flex; align-items: center; justify-content: center; box-sizing: border-box; white-space: nowrap;
+    background: #FFEAC5; color: #000; border: max(1px, calc(var(--u) * 2)) solid #000; border-radius: 9999px;
+    font-weight: 800; font-style: italic; line-height: 1;
+  }
+  .pay-price { text-align: center; color: #fff; font-weight: 700; font-style: italic; text-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
+  .pay-timer { /* pil hitung mundur (mm.ss) */
+    display: flex; align-items: center; justify-content: center; box-sizing: border-box; white-space: nowrap;
+    background: #fff; color: #000; border: max(1px, calc(var(--u) * 2)) solid #000; border-radius: 9999px;
+    font-weight: 700; font-style: italic; line-height: 1; font-variant-numeric: tabular-nums;
+  }
+  .pay-amount { text-align: center; color: #fff; font-weight: 700; font-style: italic; text-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+  .pay-input { /* kolom kode voucher di dalam baki putih */
+    width: 100%; height: 100%; background: transparent; border: 0; outline: 0; text-align: center; color: #181B23;
+    font-weight: 800; font-style: italic; letter-spacing: .12em; text-transform: uppercase; caret-color: var(--red); user-select: text;
+  }
+  .pay-fake-input { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; color: #181B23;
+    font-weight: 800; font-style: italic; letter-spacing: .12em; text-transform: uppercase; white-space: pre; }
+  .pay-caret { display: inline-block; width: .055em; height: .85em; margin-left: .06em; background: var(--red); border-radius: 2px; animation: payCaretBlink 1s steps(1) infinite; }
+  @keyframes payCaretBlink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+  .pay-error { text-align: center; color: #FFD9DE; font-weight: 700; text-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+  .pay-mini { /* tombol kecil pendamping (tempel / keyboard windows) */
+    background: transparent; color: #fff; border: 2px solid #fff; border-radius: 9999px; font-weight: 700; font-style: italic; white-space: nowrap;
+  }
+  /* Layar pengingat (desain): panggung dihitung dari wadah, bukan viewport (--u di-set inline oleh ReminderView) */
+  .rem-stage { position: absolute; left: 50%; top: 50%; z-index: 10; width: calc(var(--u) * var(--sw, 1728)); height: calc(var(--u) * var(--sh, 1117)); transform: translate(-50%, -50%); }
+  .rem-stage > * { position: absolute; }
+  .rem-logo { filter: drop-shadow(0 calc(var(--u) * 4) calc(var(--u) * 7.35) rgba(0, 0, 0, 0.31)); user-select: none; }
+  .rem-panel {
+    display: flex; flex-direction: column; box-sizing: border-box; transform: translateY(-50%);
+    border: max(1px, calc(var(--u) * 2)) solid #000; box-shadow: calc(var(--u) * 3) calc(var(--u) * 4) calc(var(--u) * 2) rgba(0, 0, 0, 0.59);
+  }
+  .rem-pill {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-sizing: border-box;
+    background: #fff; border: max(1px, calc(var(--u) * 2)) solid #000; border-radius: 9999px;
+    box-shadow: inset calc(var(--u) * 3) calc(var(--u) * 4) calc(var(--u) * 16) rgba(88, 88, 88, 0.75);
+  }
+  .rem-pill__title { margin: 0; font-weight: 800; font-style: italic; line-height: 1.1; }
+  .rem-pill__sub { margin: 0; font-weight: 300; font-style: italic; line-height: 1.15; }
+  .rem-hint { text-align: center; color: #fff; font-weight: 700; font-style: italic; text-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+  /* Layar sesi foto (desain "sesi_foto") */
+  /* Wadah kamera tunggal: bingkai desain saat menunggu -> penuh layar saat dipotret */
+  .sess-live {
+    position: absolute; z-index: 5; overflow: hidden; background: #000;
+    left: 50%; top: 50%; width: var(--fw); height: var(--fh); border-radius: calc(var(--u) * 89);
+    transform: translate(calc(-50% + var(--u) * 0.5), calc(-50% - var(--yoff, calc(var(--u) * 50)))); /* pusat y = 508: ruang atas 93, bawah (tombol di y=980) ~ 56 */
+    transition: width .35s ease, height .35s ease, left .35s ease, top .35s ease, transform .35s ease, border-radius .35s ease;
+  }
+  /* Kilatan cahaya saat jepret (ala dslrBooth): putih penuh sesaat lalu memudar cepat */
+  .sess-flash { background: #fff; animation: sessFlash .55s ease-out forwards; pointer-events: none; }
+  @keyframes sessFlash { 0% { opacity: 1; } 22% { opacity: 1; } 100% { opacity: 0; } }
+  .sess-live.is-full { z-index: 15; left: 0; top: 0; width: 100%; height: 100%; border-radius: 0; transform: none; }
+  /* Bingkai mengikuti slot template: saat penuh layar tetap berbentuk slot (di tengah), tidak melebar ke seluruh layar */
+  .sess-live.is-full.is-fit { left: 50%; top: 50%; width: min(100vw, calc(100vh * var(--ar))); height: min(100vh, calc(100vw / var(--ar))); transform: translate(-50%, -50%); }
+  .sess-rows { position: absolute; left: 0; right: 0; top: calc(var(--u) * 1180); display: flex; flex-direction: column; align-items: center; }
+  .sess-stage { pointer-events: none; }
+  .sess-stage > * { pointer-events: auto; }
+  .sess-hint--big { top: auto; bottom: 8%; font-size: clamp(22px, 3.2vmin, 44px); }
+  .sess-hint { position: absolute; left: 0; right: 0; text-align: center; color: #fff; font-weight: 700; font-style: italic; text-shadow: 0 2px 6px rgba(0, 0, 0, .6); pointer-events: none; }
+  .sess-col { display: flex; flex-direction: column; align-items: center; top: calc(var(--u) * 511); transform: translateY(-50%); }
+  .sess-tile {
+    position: relative; flex: none; padding: 0; overflow: hidden; display: flex; align-items: center; justify-content: center;
+    color: rgba(255, 255, 255, .85); font-weight: 800; font-style: italic;
+    background: rgba(255, 255, 255, .14); border: max(2px, calc(var(--u) * 3)) dashed rgba(255, 255, 255, .7); border-radius: calc(var(--u) * 22);
+    transition: transform .15s ease;
+  }
+  .sess-tile.is-filled { border: max(2px, calc(var(--u) * 4)) solid #fff; box-shadow: var(--pop-shadow), 0 0 0 max(1px, calc(var(--u) * 2)) #000; background: #fff; }
+  .sess-tile.is-filled:not(:disabled):active { transform: scale(.96); }
+  .sess-tile.is-next { border-color: #FDB533; animation: sessPulse 1.1s ease-in-out infinite; }
+  .sess-tile img { width: 100%; height: 100%; object-fit: cover; }
+  .is-mir > img { transform: scaleX(-1); }
+  .sess-tile__num { position: absolute; top: calc(var(--u) * 6); left: calc(var(--u) * 6); display: flex; align-items: center; justify-content: center; border-radius: 50%;
+    background: #FDB533; color: #3A2E00; border: 1px solid #000; font-weight: 800; line-height: 1; }
+  .sess-tile__retake { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(224, 40, 67, .92); color: #fff; font-weight: 700; font-style: italic; }
+  @keyframes sessPulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+  .sess-capture {
+    position: absolute; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: #FDB533; border: max(3px, calc(var(--u) * 7)) solid #fff; box-shadow: var(--pop-shadow), 0 0 0 max(1px, calc(var(--u) * 2)) #000;
+    transition: transform .12s ease;
+  }
+  .sess-capture span { display: block; border-radius: 50%; background: #E02843; border: 1px solid #000; }
+  .sess-capture:active:not(:disabled) { transform: scale(.92); }
+  .sess-capture:disabled { opacity: .35; }
+  .sess-review { height: 100%; display: grid; grid-template-columns: repeat(var(--cols, 4), auto); justify-content: center; align-content: center; box-sizing: border-box; }
+  .sess-review__item { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 10); }
+  .sess-review__shot { position: relative; overflow: hidden; border-radius: calc(var(--u) * 18); border: max(2px, calc(var(--u) * 4)) solid #fff; box-shadow: var(--pop-shadow), 0 0 0 max(1px, calc(var(--u) * 2)) #000; }
+  .sess-review__shot img { width: 100%; height: 100%; object-fit: cover; }
+  .sess-review__btn { width: 100%; background: var(--red); color: rgb(var(--pop-on-pink)); border: 1px solid #000; border-radius: 9999px; font-weight: 700; font-style: italic; box-shadow: 0 calc(var(--u) * 4) calc(var(--u) * 2) rgba(0, 0, 0, 0.25); }
+  .sess-review__btn:active { transform: scale(.96); }
+  .pay-card {
+    padding: 0; background: var(--red); color: #fff; border: 1px solid #000; box-shadow: var(--pop-shadow);
+    transition: transform .15s ease;
+  }
+  .pay-card:active { transform: scale(.97); }
+  .pay-card::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='267' height='365' viewBox='0 0 267 365'><filter id='n' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='0.4545 0.5263' numOctaves='3' seed='887' stitchTiles='stitch'/><feColorMatrix type='luminanceToAlpha'/><feComponentTransfer><feFuncA type='discrete' tableValues='1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0'/></feComponentTransfer><feComposite in2='SourceGraphic' operator='arithmetic' k1='0' k2='1' k3='0' k4='0' result='a'/><feFlood flood-color='rgb(255,180,180)' flood-opacity='0.53' result='f'/><feComposite in='f' in2='a' operator='in'/></filter><rect width='100%25' height='100%25' fill='black' filter='url(%23n)'/></svg>") center / cover no-repeat; }
+  .pay-card__icon { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .pay-card__label {
+    position: absolute; box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.1); border: 1px solid #FFC3C3; border-radius: 9999px;
+    font-weight: 700; font-style: italic; text-transform: uppercase; line-height: 1;
+  }
+
+  /* Badge langkah + hitung mundur (kuning, bulat, kanan-atas) */
+  .step-badge {
+    position: fixed; top: 16px; right: 76px; z-index: 50;
+    width: 76px; height: 76px; border-radius: 50%;
+    background: var(--flash); color: var(--flash-ink);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: var(--pop-shadow); border: 3px solid var(--ink);
+  }
+  .step-badge__num { font-family: Fredoka, sans-serif; font-weight: 800; font-size: 1.4rem; line-height: 1; }
+  .step-badge__timer { font-family: "Space Mono", monospace; font-size: .75rem; margin-top: 2px; }
+
+  /* Bingkai film (lubang film di kiri-kanan) untuk kamera */
+  .film-holes { position: absolute; top: 0; bottom: 0; width: 16px; z-index: 2; pointer-events: none; opacity: .85;
+    background-image: radial-gradient(circle, #fff 0, #fff 4px, transparent 5px); background-size: 16px 28px; background-repeat: repeat-y; }
+  .film-holes--l { left: 0; } .film-holes--r { right: 0; }
+
+  .ed-list::-webkit-scrollbar { display: none; }
+
+  /* Tombol START halaman awal */
+  .btn-start {
+    position: relative; margin-top: 30px; width: min(360px, 80vw); height: 95px;
+    background: var(--red); border: 1.5px solid #111; border-radius: 999px;
+    box-shadow: 0 7px 12px rgba(0,0,0,.45);
+    display: flex; justify-content: center; align-items: center; overflow: hidden; padding: 0;
+    transition: transform .1s ease, box-shadow .1s ease;
+  }
+  .btn-start::before {
+    content: ""; position: absolute; inset: 0; border-radius: 999px; pointer-events: none;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="360" height="95"><filter id="btnNoise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2"/><feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 0.8  0 0 0 0 0.85  0 0 0 0.5 0"/></filter><rect width="100%" height="100%" filter="url(%23btnNoise)" style="mix-blend-mode:overlay"/></svg>');
+    background-size: cover;
+  }
+  .btn-start span { position: relative; z-index: 2; color: rgb(var(--pop-on-pink)); font-size: clamp(32px, 6vw, 60px); font-weight: 800; font-style: italic; letter-spacing: -.5px; line-height: 1; }
+  .btn-start:hover { transform: scale(1.03); box-shadow: 0 9px 16px rgba(0,0,0,.55); }
+  .btn-start:active { transform: scale(.97); }
+  .btn-start:disabled { opacity: .5; pointer-events: none; }
+}
+
+/* "Button Font Color": semua tombol utama (bg-pop-pink) memakai warna teks yang dipilih admin */
+.bg-pop-pink { color: rgb(var(--pop-on-pink)) !important; }
+
+/* Kursor ketik yang SELALU terlihat & berkedip di semua kolom teks (aplikasi .exe mengikuti pengaturan Windows yang kadang
+   mematikan kedipan / membuat kursor tipis). Kedipan diatur sendiri lewat caret-animation: manual + keyframes. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([readonly]),
+textarea:not([readonly]) {
+  caret-color: var(--red, #E02843);
+  caret-animation: manual;
+  animation: popCaretBlink 1s step-end infinite;
+}
+@keyframes popCaretBlink {
+  0%, 55% { caret-color: var(--red, #E02843); }
+  55.01%, 100% { caret-color: transparent; }
+}

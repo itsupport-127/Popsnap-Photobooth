@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>POPSNAP — Dashboard Pusat</title>
+<style>
+  * { box-sizing: border-box; font-family: system-ui, sans-serif; }
+  body { margin: 0; background: #12081F; color: white; min-height: 100vh; }
+  .center { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; }
+  .card { background: white; color: #12081F; border-radius: 16px; padding: 24px; width: 100%; max-width: 360px; }
+  input, button { width: 100%; padding: 10px; margin-top: 8px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; }
+  button { background: #FF3E8E; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 16px; }
+  h1 { font-size: 20px; text-align: center; margin-bottom: 4px; }
+  .sub { text-align: center; font-size: 12px; color: #888; margin-bottom: 12px; }
+  .error { color: #d33; font-size: 13px; margin-top: 8px; }
+  .dashboard { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .store-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .store-card { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; }
+  .store-name { font-weight: bold; margin-bottom: 8px; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 13px; opacity: 0.85; margin-top: 4px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .online { background: #4ade80; }
+  .offline { background: #999; }
+  .logout { background: rgba(255,255,255,0.1); font-weight: normal; width: auto; padding: 8px 16px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const API_BASE = window.location.origin;
+const TOKEN_KEY = "popsnap_owner_token";
+
+async function api(path, opts = {}) {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const res = await fetch(API_BASE + path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}), ...(opts.headers || {}) },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Gagal");
+  return data;
+}
+
+function render(html) { document.getElementById("app").innerHTML = html; }
+
+async function boot() {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) return renderDashboard();
+
+  const status = await api("/api/auth/status");
+  renderLogin(status.needsSetup);
+}
+
+function renderLogin(needsSetup) {
+  render(`
+    <div class="center">
+      <form class="card" id="loginForm">
+        <h1>${needsSetup ? "Setup Akun Owner" : "Login Dashboard Pusat"}</h1>
+        <p class="sub">${needsSetup ? "Cuma muncul sekali di awal" : "POPSNAP Multi-Store Monitoring"}</p>
+        <input type="text" id="username" placeholder="Username" required />
+        <input type="password" id="password" placeholder="Password ${needsSetup ? '(min 6 karakter)' : ''}" required minlength="${needsSetup ? 6 : 1}" />
+        <button type="submit">${needsSetup ? "Buat Akun & Masuk" : "Masuk"}</button>
+        <div class="error" id="err"></div>
+      </form>
+    </div>
+  `);
+
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+    try {
+      const data = await api(needsSetup ? "/api/auth/setup" : "/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
+      localStorage.setItem(TOKEN_KEY, data.token);
+      renderDashboard();
+    } catch (err) {
+      document.getElementById("err").textContent = err.message;
+    }
+  });
+}
+
+async function renderDashboard() {
+  render(`<div class="dashboard"><p>Memuat data toko...</p></div>`);
+  try {
+    const stores = await api("/api/stores");
+    const now = Date.now();
+
+    render(`
+      <div class="dashboard">
+        <div class="header">
+          <h1 style="margin:0;">Dashboard Pusat POPSNAP</h1>
+          <button class="logout" onclick="logout()">Keluar</button>
+        </div>
+        <div class="store-grid">
+          ${stores.length === 0 ? '<p style="opacity:0.6;">Belum ada toko yang lapor. Pastikan CLOUD_SYNC_URL sudah diisi di masing-masing backend toko.</p>' : ""}
+          ${stores.map((s) => {
+            const isOnline = s.last_seen_at && (now - new Date(s.last_seen_at + "Z").getTime()) < 15 * 60 * 1000;
+            return `
+              <div class="store-card">
+                <div class="store-name"><span class="status-dot ${isOnline ? "online" : "offline"}"></span>${s.store_name || s.store_id}</div>
+                <div class="stat-row"><span>Sesi hari ini</span><span>${s.today_sessions}</span></div>
+                <div class="stat-row"><span>Omzet hari ini</span><span>Rp ${Number(s.today_revenue).toLocaleString("id-ID")}</span></div>
+                <div class="stat-row"><span>Total sesi (all-time)</span><span>${s.total_sessions_all_time}</span></div>
+                <div class="stat-row"><span>Lapor terakhir</span><span>${s.last_seen_at ? new Date(s.last_seen_at + "Z").toLocaleString("id-ID") : "-"}</span></div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `);
+  } catch (err) {
+    if (err.message.includes("habis") || err.message.includes("login")) {
+      localStorage.removeItem(TOKEN_KEY);
+      boot();
+    } else {
+      render(`<div class="center"><p>Error: ${err.message}</p></div>`);
+    }
+  }
+}
+
+function logout() {
+  localStorage.removeItem(TOKEN_KEY);
+  boot();
+}
+
+boot();
+</script>
+</body>
+</html>
