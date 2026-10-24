@@ -38,7 +38,7 @@ export default function LiveView({ camera, aspect, crop = true, fill = false, on
     width: sideways ? "100cqh" : "100cqw", height: sideways ? "100cqw" : "100cqh",
     transform: `translate(-50%, -50%) rotate(${rot}deg) scaleX(${(mirror ?? lv.mirror) ? -1 : 1})`,
     maxWidth: "none", maxHeight: "none", // Tailwind membatasi video/img ke 100%; saat dirotasi 90° lebar elemen = tinggi kotak, jadi batas itu harus dicabut
-    objectFit: crop ? "cover" : "contain", opacity: lv.enabled ? 1 : 0, filter: useGamma ? `url(#${gid})` : undefined, willChange: "transform", // layer sendiri: frame baru tidak memaksa lukis ulang elemen lain
+    objectFit: crop ? "cover" : "contain", opacity: lv.enabled ? 1 : 0, filter: useGamma ? `url(#${gid})` : undefined, willChange: lv.asIs === true ? undefined : "transform", imageRendering: "auto", // (mode "apa adanya": tanpa will-change supaya browser memperkecil gambar dengan kualitas tinggi, bukan bilinear cepat yang bergerigi/pecah) layer sendiri: frame baru tidak memaksa lukis ulang elemen lain
   };
   // Area potong: persegi panjang berrasio `guide`, di tengah gambar kamera yang tampil utuh (sama dengan pemotongan saat foto dimasukkan ke slot)
   const A = dims.w && dims.h ? (sideways ? dims.h / dims.w : dims.w / dims.h) : 0;
