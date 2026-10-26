@@ -167,7 +167,10 @@ export default function SettingsDisplay({ s, set, setError }) {
       </Card>
 
       <Card title="SHARING SCREEN">
-        <Row label="Final Screen Timeout" hint="Detik layar hasil/QR tampil sebelum kembali ke layar Start. 0 = tidak otomatis."><div className="w-24"><NumInput value={s.session.timers.downloadQr} min={0} onCommit={(v) => set(["session", "timers", "downloadQr"], Math.round(v))} /></div></Row>
+        <Row label="Mode akhir sesi" hint="QR: pelanggan scan QR / ketik kode untuk mengunduh (butuh Galeri cloud). Preview saja: hanya menampilkan hasil + tombol Done + timer, tanpa QR dan tanpa unggah ke cloud (foto tetap tersimpan di PC booth, seperti dslrBooth tanpa sharing). Timer habis = kembali ke layar awal.">
+          <Select value={sh.mode ?? "qr"} onChange={(v) => set(["display", "sharing", "mode"], v)} className="max-w-[280px]" options={[["qr", "QR + preview (pelanggan unduh)"], ["preview", "Preview saja (tanpa QR)"]]} />
+        </Row>
+        <Row label="Final Screen Timeout" hint="Detik layar hasil/QR tampil sebelum kembali ke layar Start. 0 = tidak otomatis (mode Preview saja minimal 5 detik; kalau lebih kecil otomatis jadi 30)."><div className="w-24"><NumInput value={s.session.timers.downloadQr} min={0} onCommit={(v) => set(["session", "timers", "downloadQr"], Math.round(v))} /></div></Row>
         <Row label="Hide Done Button" hint="Kalau aktif, satu-satunya cara kembali ke awal adalah timeout (otomatis minimal 5 detik)."><Check checked={sh.hideDone} onChange={(v) => set(["display", "sharing", "hideDone"], v)} label="Sembunyikan tombol Done" /></Row>
         <Row label="Sharing Icons Location"><Select value={sh.iconsLocation} onChange={(v) => set(["display", "sharing", "iconsLocation"], v)} className="max-w-[160px]" options={[["right", "Right"], ["left", "Left"], ["bottom", "Bottom"]]} /></Row>
         <Row label="Show Text Labels"><Check checked={sh.showLabels} onChange={(v) => set(["display", "sharing", "showLabels"], v)} label="Tampilkan teks di samping QR (mis. “Scan untuk download foto”)" /></Row>

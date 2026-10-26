@@ -28,6 +28,8 @@ export default function ResultScreen({ session, dispatch }) {
   const s = appConfig.settings ?? {};
   const sharing = s.display?.sharing ?? { hideDone: false, iconsLocation: "right", showLabels: true };
   const timeout = appConfig.timers.downloadQr;
+  // Mode "preview": akhir sesi hanya menampilkan hasil + tombol selesai + timer (tanpa QR). Timer habis = kembali ke layar awal. Mode "qr" (bawaan): QR + kode unduh.
+  const previewOnly = sharing.mode === "preview";
   const isPhoto = session.mode === "photo";
   const R = { live: true, gif: true, defaultView: "photo", gifStyle: "template", gifHoldMs: 1800, ...(s.result ?? {}) }; // Admin > GIF & Video > Hasil Akhir
   const picked = useRef(false); // tamu sudah memilih tab sendiri -> jangan dipindah otomatis
@@ -133,10 +135,14 @@ export default function ResultScreen({ session, dispatch }) {
   }, [live, gif]);
   // SATU QR / link untuk semuanya (halaman unduh berisi hasil template, GIF, video, foto mentah, klip). Tab Foto | GIF hanya mengganti tampilan.
   const qrUrl = shareUrl || session.downloadUrl;
+  // Kode unik (10 karakter) untuk diketik di halaman galeri bila QR tidak terbaca; CS juga bisa mengirimnya lewat WhatsApp. Ditampilkan "K7M2 9QXH 4B".
+  const shareCode = (() => { const m = String(qrUrl || "").match(/\/s\/([23456789A-HJ-NP-Z]{10})(?:[/?#]|$)/); return m ? `${m[1].slice(0, 4)} ${m[1].slice(4, 8)} ${m[1].slice(8)}` : null; })();
   // Posisi QR: kanan (desain) atau kiri (cerminkan seluruh tata letak). "bawah" memakai tata letak desain (kanan).
   const flip = sharing.iconsLocation === "left";
   const X = (x, w) => (flip && shape === "landscape" ? 1728 - x - w : x);
 
+  // Panel QR (Done tepat di tengah bawah QR; tombol Foto | Live | GIF di tengah bawah kartu hasil)
+  const PANEL = { x: P(X(864, 648), 260, 520), y: P(308, 1130, 330), w: P(648, 560), h: P(596, 520) };
   const fitStyle = { maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" };
   const preview = !isPhoto ? (
     session.media?.kind === "video" ? (
@@ -156,10 +162,11 @@ export default function ResultScreen({ session, dispatch }) {
     <p style={{ color: "#9CA3AF", fontSize: U(28), textAlign: "center" }}>Merender hasil...</p>
   );
   // Foto: kotak 437x565, tepat di tengah kartu (foto 2:3 persis seperti desain, 378x565); mode lain boleh lebih besar
-  const box = portrait ? (isPhoto ? { x: 190, y: 230, w: 700, h: 800 } : { x: 180, y: 215, w: 720, h: 830 }) : shape === "square" ? (isPhoto ? { x: 60, y: 260, w: 390, h: 640 } : { x: 55, y: 250, w: 400, h: 660 }) : isPhoto ? { x: 215.5, y: 276, w: 437, h: 565 } : { x: 215, y: 207, w: 457, h: 703 };
+  const CW = P(1728, 1080, 1200); // lebar kanvas desain
+  const box = previewOnly ? P({ x: 554, y: 150, w: 620, h: 700 }, { x: 160, y: 160, w: 760, h: 1300 }, { x: 320, y: 160, w: 560, h: 700 }) : portrait ? (isPhoto ? { x: 190, y: 200, w: 700, h: 780 } : { x: 180, y: 215, w: 720, h: 830 }) : shape === "square" ? (isPhoto ? { x: 60, y: 260, w: 390, h: 640 } : { x: 55, y: 250, w: 400, h: 660 }) : isPhoto ? { x: 215.5, y: 276, w: 437, h: 565 } : { x: 215, y: 207, w: 457, h: 703 };
 
   // Kartu hasil ikut bentuk template: template landscape -> kartu melebar, portrait -> kartu menjulang (posisi tengah desain dipertahankan)
-  const card = { x: P(175.5, 150, 30), y: P(177.5, 190, 230), w: P(517, 780, 450), h: P(763, 880, 700) };
+  const card = previewOnly ? P({ x: 494, y: 90, w: 740, h: 820 }, { x: 100, y: 100, w: 880, h: 1420 }, { x: 260, y: 100, w: 680, h: 820 }) : { x: P(175.5, 150, 30), y: P(177.5, 170, 230), w: P(517, 780, 450), h: P(763, 840, 700) };
   const tpl = session.selectedTemplate;
   const ta = tpl?.canvasWidth && tpl?.canvasHeight ? tpl.canvasWidth / tpl.canvasHeight : null;
   let boxF = box, cardF = card;
@@ -171,29 +178,38 @@ export default function ResultScreen({ session, dispatch }) {
     cardF = { x: card.x + card.w / 2 - w / 2, y: card.y + card.h / 2 - h / 2, w, h };
   }
 
+  // Baris bawah (mode preview): tombol Foto | Live | GIF dan DONE berdampingan, di tengah bawah kartu hasil
+  const showTabs = isPhoto && views.length > 1;
+  const tabsW = 150 * views.length, doneW = 220;
+  const rowY = cardF.y + cardF.h + 24;
+  const rowX = CW / 2 - tabsW / 2; // Foto | Live | GIF di tengah, DONE tepat di bawahnya
+  const doneY = rowY + (showTabs ? 64 + 18 : 0);
+  const belowY = doneY + (sharing.hideDone ? 0 : 64 + 16); // teks status / error di bawah DONE
+
   return (
     <div className="kiosk-screen strip-screen h-full w-full overflow-hidden" data-shape={shape}>
       <div className="absolute inset-0"><SesiDecor /></div>
 
       <div className="strip-stage">
         {timeout > 0 && !hideQr && (
-          <div className="pay-timer" role="timer" style={{ left: U(P(X(1322, 190), 445, 505)), top: U(P(140, 112, 190)), width: U(190), height: U(54), fontSize: U(32) }}>{mm}.{ss}</div>
+          <div className="pay-timer" role="timer" style={{ left: U(previewOnly ? CW / 2 - 95 : P(PANEL.x + PANEL.w / 2 - 95, 445, PANEL.x + PANEL.w / 2 - 95)), top: U(previewOnly ? P(24, 40, 28) : P(140, 112, 176)), width: U(190), height: U(54), fontSize: U(32) }}>{mm}.{ss}</div>
         )}
 
         {/* Kartu hasil */}
-        <div style={{ left: U(shape === "landscape" ? X(cardF.x, cardF.w) : cardF.x), top: U(cardF.y), width: U(cardF.w), height: U(cardF.h), background: "#fff", border: "3px solid #000", borderRadius: U(72.5), boxSizing: "border-box" }} />
-        <div style={{ left: U(shape === "landscape" ? X(boxF.x, boxF.w) : boxF.x), top: U(boxF.y), width: U(boxF.w), height: U(boxF.h), display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ left: U(shape === "landscape" && !previewOnly ? X(cardF.x, cardF.w) : cardF.x), top: U(cardF.y), width: U(cardF.w), height: U(cardF.h), background: "#fff", border: "3px solid #000", borderRadius: U(72.5), boxSizing: "border-box" }} />
+        <div style={{ left: U(shape === "landscape" && !previewOnly ? X(boxF.x, boxF.w) : boxF.x), top: U(boxF.y), width: U(boxF.w), height: U(boxF.h), display: "flex", alignItems: "center", justifyContent: "center" }}>
           {preview}
         </div>
 
         {/* Judul */}
-        {sharing.showLabels && (
-          <div className="pay-title" style={{ left: U(P(X(858, 675), 202, 262)), top: U(P(214, 36, 120)), width: U(675), height: U(69), fontSize: U(40) }}>SCAN HERE TO GET YOUR FILE</div>
+        {sharing.showLabels && !previewOnly && (
+          <div className="pay-title" style={{ left: U(P(X(858, 675), 202, PANEL.x + PANEL.w / 2 - 320)), top: U(P(214, 36, 250)), width: U(P(675, 675, 640)), height: U(69), fontSize: U(40) }}>SCAN HERE TO GET YOUR FILE</div>
         )}
 
+        {!previewOnly && (<>
         {/* Panel QR */}
-        <div className="strip-panel" style={{ left: U(P(X(864, 648), 260, 520)), top: U(P(308, 1100, 290)), width: U(P(648, 560)), height: U(P(596, 520)) }} />
-        <div className="strip-tray" style={{ left: U(P(X(882, 612), 276, 538)), top: U(P(326, 1116, 308)), width: U(P(612, 528)), height: U(P(560, 488)), borderRadius: U(85), display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+        <div className="strip-panel" style={{ left: U(PANEL.x), top: U(PANEL.y), width: U(PANEL.w), height: U(PANEL.h) }} />
+        <div className="strip-tray" style={{ left: U(P(X(882, 612), 276, 538)), top: U(PANEL.y + 18), width: U(P(612, 528)), height: U(P(560, 488)), borderRadius: U(85), display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: U(14) }}>
           {error ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: U(24), padding: `0 ${U(60)}` }}>
               <p style={{ margin: 0, fontWeight: 700, fontSize: U(30), color: "#B81C34" }}>{error}</p>
@@ -202,17 +218,23 @@ export default function ResultScreen({ session, dispatch }) {
           ) : hideQr ? (
             <p style={{ margin: 0, fontWeight: 800, fontStyle: "italic", fontSize: U(38), color: "#55606E", padding: `0 ${U(60)}` }}>Waktu download sudah berakhir</p>
           ) : qrUrl ? (
-            <RoundedQR value={qrUrl} size={428} level="Q" rounded={sharing.qrStyle !== "square"} style={{ width: U(P(428, 380)), height: U(P(428, 380)) }} />
+            <>
+              <RoundedQR value={qrUrl} size={428} level="Q" rounded={sharing.qrStyle !== "square"} style={{ width: U(P(428, 380)), height: U(P(428, 380)) }} />
+              {shareCode && <div style={{ fontFamily: '"Space Mono", monospace', fontWeight: 700, fontSize: U(P(34, 30)), letterSpacing: ".06em", color: "#181B23" }}>{shareCode}</div>}
+            </>
           ) : (
             <p style={{ margin: 0, fontSize: U(32), fontStyle: "italic", color: "#55606E" }}>Menyiapkan file...</p>
           )}
         </div>
 
+        </>)}
+
         {/* Tombol tampilan: Foto | Live | GIF (muncul sesuai yang tersedia) */}
-        {isPhoto && views.length > 1 && (() => {
+        {showTabs && (() => {
           const w = 150 * views.length, seg = 100 / views.length, idx = views.findIndex(([id]) => id === activeView);
+          const tabX = previewOnly ? rowX : (shape === "landscape" ? X(cardF.x, cardF.w) : cardF.x) + cardF.w / 2 - w / 2;
           return (
-            <div style={{ left: U(P(X(864, w), 260, 520)), top: U(P(930, 1660, 910)), width: U(w), height: U(64), borderRadius: U(32), background: "#DBDBDB", overflow: "hidden" }}>
+            <div style={{ left: U(tabX), top: U(cardF.y + cardF.h + 24), width: U(w), height: U(64), borderRadius: U(32), background: "#DBDBDB", overflow: "hidden" }}>
               <div style={{ position: "absolute", top: 0, height: "100%", width: `${seg}%`, left: `${idx * seg}%`, borderRadius: U(32), background: "#E02843", transition: "left .2s ease" }} />
               {views.map(([id, label], i) => (
                 <button key={id} type="button" onClick={() => { picked.current = true; setView(id); }}
@@ -223,13 +245,18 @@ export default function ResultScreen({ session, dispatch }) {
         })()}
 
         {animating && (
-          <p style={{ left: U(P(X(864, 340), 260, 520)), top: U(P(1004, 1738, 990)), margin: 0, fontSize: U(P(24, 22)), fontStyle: "italic", color: "#55606E", width: U(P(648, 560)) }}>Membuat video Live & GIF… QR sudah bisa dipindai, file menyusul di halaman unduh.</p>
+          <p style={{ left: U(previewOnly ? CW / 2 - 300 : PANEL.x), top: U(previewOnly ? belowY : P(1004, 1750, 1030)), margin: 0, fontSize: U(P(24, 22)), fontStyle: "italic", color: previewOnly ? "#fff" : "#55606E", width: U(previewOnly ? 600 : PANEL.w), textAlign: "center" }}>{previewOnly ? "Membuat video Live & GIF…" : "Membuat video Live & GIF… QR sudah bisa dipindai, file menyusul di halaman unduh."}</p>
         )}
 
         {/* Done */}
         {!sharing.hideDone && (
           <button type="button" className="strip-btn" onClick={() => dispatch({ type: "DONE" })}
-            style={{ left: U(P(X(1332, 180), 640, 988)), top: U(P(930, 1660, 910)), width: U(180), height: U(64), fontSize: U(36) }}>DONE</button>
+            style={{ left: U(previewOnly ? CW / 2 - doneW / 2 : PANEL.x + PANEL.w / 2 - 110), top: U(previewOnly ? doneY : P(930, 1676, 954)), width: U(doneW), height: U(64), fontSize: U(36) }}>DONE</button>
+        )}
+        {previewOnly && error && (
+          <div style={{ left: U(CW / 2 - 300), top: U(belowY), width: U(600), textAlign: "center", color: "#fff", fontWeight: 700, fontSize: U(26) }}>
+            {error} <button onClick={() => setAttempt((n) => n + 1)} className="strip-btn" style={{ width: U(200), height: U(54), fontSize: U(26), marginLeft: U(12) }}>Coba lagi</button>
+          </div>
         )}
       </div>
     </div>

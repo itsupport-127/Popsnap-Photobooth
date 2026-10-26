@@ -76,7 +76,7 @@ const DEFAULTS = {
       cropLiveview: true, hideCancel: false, showThumbnails: true, thumbnailLocation: "bottom",
       sayCheeseImage: "",
     },
-    sharing: { hideDone: false, iconsLocation: "right", showLabels: true },
+    sharing: { mode: "qr", hideDone: false, iconsLocation: "right", showLabels: true },
     // Tombol kunci (gembok) -> PIN. Muncul di SEMUA layar booth, bukan hanya layar Start.
     lock: {
       position: "top-right",   // top-left | top-right | bottom-left | bottom-right
@@ -337,7 +337,7 @@ function update(patch) {
       sayCheeseImage: cp.sayCheeseImage === undefined ? ccp.sayCheeseImage : upath(cp.sayCheeseImage, ccp.sayCheeseImage),
     };
     const sh = obj(d.sharing), csh = cd.sharing;
-    nd.sharing = { hideDone: bool(sh.hideDone, csh.hideDone), iconsLocation: pick(sh.iconsLocation, ["right", "left", "bottom"], csh.iconsLocation), showLabels: bool(sh.showLabels, csh.showLabels) };
+    nd.sharing = { mode: pick(sh.mode, ["qr", "preview"], csh.mode || "qr"), hideDone: bool(sh.hideDone, csh.hideDone), iconsLocation: pick(sh.iconsLocation, ["right", "left", "bottom"], csh.iconsLocation), showLabels: bool(sh.showLabels, csh.showLabels) };
     const lk = obj(d.lock), clk = cd.lock;
     nd.lock = {
       position: pick(lk.position, ["top-left", "top-right", "bottom-left", "bottom-right"], clk.position),
@@ -405,7 +405,7 @@ function update(patch) {
   }
 
   // "Hide Done" hanya boleh aktif kalau layar hasil punya timeout otomatis — kalau tidak, booth akan macet di layar hasil
-  if (next.display.sharing.hideDone && next.session.timers.downloadQr < 5) next.session.timers.downloadQr = 30;
+  if ((next.display.sharing.hideDone || next.display.sharing.mode === "preview") && next.session.timers.downloadQr < 5) next.session.timers.downloadQr = 30; // preview tanpa timer = layar tertahan selamanya
 
   if (isObj(p.editor) && Array.isArray(p.editor.filters)) {
     const seen = new Set(["none"]);

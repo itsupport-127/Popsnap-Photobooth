@@ -30,6 +30,8 @@ const cloud = require("./cloudSync"); // sinkron riwayat transaksi ke aplikasi k
 const doku = require("./doku"); // QRIS DOKU (SNAP)
 const gallery = require("./gallerySync"); // unggah hasil sesi ke POPSNAP Galeri (halaman QR + cloud)
 const { customAlphabet } = require("nanoid");
+// Mode akhir sesi (Admin > Tampilan > Sharing): "preview" = hasil hanya ditampilkan di booth, tanpa QR / link / unggah ke galeri cloud.
+const sharingOn = () => (settingsStore.load().display?.sharing?.mode ?? "qr") !== "preview";
 const crypto = require("crypto");
 
 // Midtrans dibangun DINAMIS dari pengaturan admin (fallback ke .env), supaya key bisa
@@ -1349,7 +1351,7 @@ app.post("/api/session/finish", (req, res) => {
 
   const expiresAt = sessionExpiry();
   // Template animasi + halaman unduh aktif -> QR membuka halaman /s/<token> yang berisi semua file sesi (foto, GIF, video, klip)
-  const shareToken = nanoid(16); // QR sesi foto = SATU halaman berisi semua file (hasil template, GIF, video, foto mentah, klip)
+  const shareToken = sharingOn() ? gallery.newShareCode() : null; // QR sesi foto = SATU halaman berisi semua file (hasil template, GIF, video, foto mentah, klip)
   db.prepare(`
     INSERT INTO sessions (id, template_id, final_image_path, payment_method, expires_at, mode, share_token)
     VALUES (?, ?, ?, ?, ?, 'photo', ?)
@@ -1441,7 +1443,7 @@ app.post("/api/session/media", express.raw({ type: () => true, limit: "300mb" })
   if (isExisting) {
     db.prepare(`UPDATE sessions SET ${spec.column} = ? WHERE id = ?`).run(urlPath, id);
   } else {
-    mediaShareToken = gallery.ready() ? nanoid(16) : null; // galeri aktif: QR = halaman galeri
+    mediaShareToken = gallery.ready() && sharingOn() ? gallery.newShareCode() : null; // galeri aktif: QR = halaman galeri
     db.prepare(`INSERT INTO sessions (id, ${spec.column}, payment_method, expires_at, mode, share_token) VALUES (?, ?, ?, ?, ?, ?)`)
       .run(id, urlPath, req.query.paymentMethod ? String(req.query.paymentMethod).slice(0, 20) : null, sessionExpiry(), kind, mediaShareToken);
     if (mediaShareToken) gallery.enqueue(id, mediaShareToken, kind);

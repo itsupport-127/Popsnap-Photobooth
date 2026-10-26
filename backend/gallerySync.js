@@ -12,7 +12,9 @@ const path = require("path");
 const db = require("./db");
 const config = require("./config");
 const settingsStore = require("./settings");
-const { nanoid } = require("nanoid");
+const { nanoid, customAlphabet } = require("nanoid");
+// Kode sesi: 10 huruf kapital + angka tanpa karakter membingungkan (0/O, 1/I/L). Mudah diketik / dikirim lewat WA bila QR bermasalah.
+const newShareCode = customAlphabet("23456789ABCDEFGHJKLMNPQRSTUVWXYZ", 10);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS gallery_sync (
@@ -247,7 +249,7 @@ function uploadArchive(outDir, date, id, redo = false) {
   if (!listFolder(folder).length) return { ok: false, error: "Tidak ada file di folder sesi ini." };
   if (redo) db.prepare("DELETE FROM gallery_files WHERE session_id = ?").run(id); // unggah ulang semua (mis. galeri/bucket diganti); galeri melewati file yang sudah ada
   const row = db.prepare("SELECT * FROM gallery_sync WHERE session_id = ?").get(id);
-  const token = row?.token || db.prepare("SELECT share_token FROM sessions WHERE id = ?").get(id)?.share_token || nanoid(16);
+  const token = row?.token || db.prepare("SELECT share_token FROM sessions WHERE id = ?").get(id)?.share_token || newShareCode();
   const mode = row?.mode || db.prepare("SELECT mode FROM sessions WHERE id = ?").get(id)?.mode || "photo";
   if (row) db.prepare("UPDATE gallery_sync SET folder = ?, state = 'active', attempts = 0, next_try = 0, last_error = NULL WHERE session_id = ?").run(folder, id);
   else db.prepare("INSERT INTO gallery_sync (session_id, token, mode, folder, created_at) VALUES (?, ?, ?, ?, ?)").run(id, token, mode, folder, Date.now() - ACTIVE_MS - 1000);
@@ -255,4 +257,5 @@ function uploadArchive(outDir, date, id, redo = false) {
   return { ok: true, token, url: `${baseUrl()}/s/${token}` };
 }
 
-module.exports = { writeShareFile, listArchive, uploadArchive, enabled, ready, shareUrlFor, enqueue, run, start, testConnection, status, nudge };
+module.exports = {
+  newShareCode, writeShareFile, listArchive, uploadArchive, enabled, ready, shareUrlFor, enqueue, run, start, testConnection, status, nudge };
