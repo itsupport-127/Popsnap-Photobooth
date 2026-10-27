@@ -113,6 +113,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_tx_log_updated ON tx_log(updated_at);
 `);
 
+// Perubahan dari kasir (edit/hapus transaksi). Baris tx_log TIDAK dihapus supaya nomor transaksi tidak terpakai ulang.
+ensureColumn("tx_log", "kasir_edited_at", "TEXT");
+ensureColumn("tx_log", "kasir_deleted_at", "TEXT");
+ensureColumn("tx_log", "gallery_purged", "INTEGER NOT NULL DEFAULT 0"); // 0 = galeri belum dibersihkan, 1 = sudah / tidak ada
+
 ensureColumn("templates", "price", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("templates", "foreground_url", "TEXT");
 ensureColumn("templates", "layers", "TEXT NOT NULL DEFAULT '[]'");

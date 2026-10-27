@@ -117,6 +117,16 @@ async function api(method, p, body) {
   } finally { clearTimeout(t); }
 }
 
+/** Hapus sesi di galeri cloud (transaksi dihapus di kasir). 404 = sudah tidak ada = dianggap selesai. */
+async function deleteRemote(token) {
+  if (!ready()) return { ok: false, skipped: true };
+  try { await api("DELETE", `/sessions/${encodeURIComponent(token)}`); }
+  catch (e) { if (e.status !== 404) return { ok: false, error: e.name === "AbortError" ? "Galeri tidak menjawab (timeout)" : e.message }; }
+  // jangan unggah ulang file sesi ini
+  db.prepare("UPDATE gallery_sync SET state = 'deleted', last_error = NULL WHERE token = ?").run(token);
+  return { ok: true };
+}
+
 async function putFile(url, f, contentType) {
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 10 * 60 * 1000);
   try {
@@ -258,4 +268,4 @@ function uploadArchive(outDir, date, id, redo = false) {
 }
 
 module.exports = {
-  newShareCode, writeShareFile, listArchive, uploadArchive, enabled, ready, shareUrlFor, enqueue, run, start, testConnection, status, nudge };
+  newShareCode, writeShareFile, listArchive, uploadArchive, enabled, ready, shareUrlFor, enqueue, run, start, testConnection, status, nudge, deleteRemote };

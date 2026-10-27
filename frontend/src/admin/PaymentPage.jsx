@@ -250,14 +250,14 @@ function CloudCard({ cloud, onSaved }) {
             <thead><tr className="text-left text-[#6B7684] border-b border-[#D5DCE4]"><th className="py-1 pr-3">Nomor transaksi</th><th className="pr-3">Waktu</th><th className="pr-3">Produk</th><th className="pr-3">Bayar</th><th className="pr-3 text-right">Nominal</th><th className="pr-3">Status</th><th>Kasir</th></tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.order_no} className="border-b border-[#EEF2F6]">
+                <tr key={r.order_no} className={`border-b border-[#EEF2F6] ${r.kasir_deleted_at ? "opacity-50 line-through" : ""}`}>
                   <td className="py-1 pr-3 font-mono">{r.order_no}</td>
                   <td className="pr-3">{fmtTime(r.created_at)}</td>
                   <td className="pr-3">{r.template_name || "-"}</td>
                   <td className="pr-3">{r.method}</td>
                   <td className="pr-3 text-right">{rp(r.amount)}</td>
                   <td className={`pr-3 font-bold ${(STATUS[r.status] || [])[1] || ""}`}>{(STATUS[r.status] || [r.status])[0]}</td>
-                  <td>{r.status !== "paid" ? "-" : r.synced ? "✓ terkirim" : r.sync_error ? `⚠ ${r.sync_error}` : "menunggu"}</td>
+                  <td>{r.kasir_deleted_at ? "dihapus di kasir" : r.status !== "paid" ? "-" : r.kasir_edited_at ? "✓ diedit di kasir" : r.synced ? "✓ terkirim" : r.sync_error ? `⚠ ${r.sync_error}` : "menunggu"}</td>
                 </tr>
               ))}
             </tbody>

@@ -165,7 +165,7 @@ async function post(path, body, method = "POST") {
 }
 
 function pendingRows(limit = BATCH) {
-  return db.prepare(`SELECT * FROM tx_log WHERE status = 'paid' AND (synced_at IS NULL OR updated_at > synced_at) ORDER BY created_at LIMIT ?`).all(limit);
+  return db.prepare(`SELECT * FROM tx_log WHERE status = 'paid' AND kasir_deleted_at IS NULL AND (synced_at IS NULL OR updated_at > synced_at) ORDER BY created_at LIMIT ?`).all(limit);
 }
 
 /** Kirim semua yang belum terkirim. force = abaikan jeda ulang setelah gagal (tombol "Kirim sekarang"). */
@@ -202,6 +202,72 @@ async function pushPending({ force = false } = {}) {
 }
 
 let nudgeTimer = null;
+// ---------- Perubahan dari kasir (edit / hapus) ----------
+// Kasir = sumber angka resmi. Booth menarik perubahan lalu menyesuaikan tx_log; kalau transaksi dihapus,
+// sesi galeri cloud-nya ikut dihapus. Baris tx_log tetap disimpan (ditandai) supaya nomor transaksi tidak dipakai ulang.
+const CURSOR_KEY = "kasir_changes_cursor";
+const pullState = { running: false, nextAt: 0, lastOkAt: null, lastError: null, applied: 0 };
+const getCursor = () => db.prepare("SELECT value FROM app_settings WHERE key = ?").get(CURSOR_KEY)?.value || "";
+const setCursor = (v) => db.prepare("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(CURSOR_KEY, String(v));
+
+/** Terapkan 1 perubahan dari kasir. Idempoten: aman dipanggil berulang untuk perubahan yang sama. */
+function applyChange(c) {
+  const row = db.prepare("SELECT * FROM tx_log WHERE order_no = ?").get(c?.order_no);
+  if (!row) return false; // bukan transaksi booth ini
+  const at = c.changed_at || nowIso();
+  if (c.deleted) {
+    if (row.kasir_deleted_at) return false;
+    db.prepare("UPDATE tx_log SET kasir_deleted_at = ?, gallery_purged = 0 WHERE order_no = ?").run(at, row.order_no);
+    return true;
+  }
+  if (row.kasir_deleted_at) return false; // hapus tidak bisa dibatalkan oleh edit lama
+  if (row.kasir_edited_at && new Date(row.kasir_edited_at) >= new Date(at)) return false; // sudah diterapkan
+  // updated_at sengaja tidak diubah: ini bukan perubahan baru dari booth, jadi tidak perlu dikirim ulang ke kasir
+  db.prepare("UPDATE tx_log SET template_name = ?, method = ?, amount = ?, status = ?, paid_at = ?, kasir_edited_at = ? WHERE order_no = ?")
+    .run(c.template_name ?? null, c.method ?? row.method, Number(c.amount) || 0, c.status ?? row.status, c.paid_at ?? row.paid_at, at, row.order_no);
+  return true;
+}
+
+/** Bersihkan galeri cloud untuk transaksi yang dihapus di kasir. Diulang sampai berhasil. */
+async function purgeGalleries() {
+  const rows = db.prepare("SELECT order_no, session_id FROM tx_log WHERE kasir_deleted_at IS NOT NULL AND gallery_purged = 0 LIMIT 20").all();
+  if (!rows.length) return 0;
+  let gallery = null; try { gallery = require("./gallerySync"); } catch { /* galeri tidak tersedia */ }
+  let n = 0;
+  for (const r of rows) {
+    const token = r.session_id ? db.prepare("SELECT share_token FROM sessions WHERE id = ?").get(r.session_id)?.share_token : null;
+    if (!token) { db.prepare("UPDATE tx_log SET gallery_purged = 1 WHERE order_no = ?").run(r.order_no); continue; } // tidak ada galeri
+    if (!gallery || !gallery.ready()) continue; // galeri belum aktif: coba lagi nanti
+    const res = await gallery.deleteRemote(token);
+    if (res.ok) { db.prepare("UPDATE tx_log SET gallery_purged = 1 WHERE order_no = ?").run(r.order_no); n++; }
+  }
+  return n;
+}
+
+async function pullChanges({ force = false } = {}) {
+  if (pullState.running || !ready()) return { ok: false, skipped: true };
+  if (!force && Date.now() < pullState.nextAt) return { ok: false, skipped: true };
+  pullState.running = true;
+  let applied = 0;
+  try {
+    for (let page = 0; page < 10; page++) {
+      const cursor = getCursor();
+      const data = await post(`/changes${cursor ? `?since=${encodeURIComponent(cursor)}` : ""}`, null, "GET");
+      const list = data.changes || [];
+      for (const c of list) if (applyChange(c)) applied++;
+      if (data.cursor && data.cursor !== cursor) setCursor(data.cursor);
+      if (list.length < 200 || !data.cursor || data.cursor === cursor) break;
+    }
+    await purgeGalleries();
+    pullState.lastOkAt = nowIso(); pullState.lastError = null; pullState.nextAt = 0; pullState.applied += applied;
+    return { ok: true, applied };
+  } catch (err) {
+    pullState.lastError = err.name === "AbortError" ? "Kasir tidak menjawab (timeout)" : err.message;
+    pullState.nextAt = Date.now() + 60 * 1000;
+    return { ok: false, error: pullState.lastError, applied };
+  } finally { pullState.running = false; }
+}
+
 function nudge() { // kirim segera (setelah jeda singkat supaya perubahan beruntun dikirim sekaligus)
   if (!ready() || nudgeTimer) return;
   nudgeTimer = setTimeout(() => { nudgeTimer = null; pushPending().catch(() => {}); }, 1500);
@@ -222,8 +288,9 @@ function status() {
   const count = (sql) => db.prepare(sql).get().n;
   return {
     enabled: !!c.enabled, configured: !!(baseUrl() && c.token), studioCode: c.studioCode || null,
-    pending: count("SELECT COUNT(*) n FROM tx_log WHERE status = 'paid' AND (synced_at IS NULL OR updated_at > synced_at)"),
+    pending: count("SELECT COUNT(*) n FROM tx_log WHERE status = 'paid' AND kasir_deleted_at IS NULL AND (synced_at IS NULL OR updated_at > synced_at)"),
     errors: count("SELECT COUNT(*) n FROM tx_log WHERE sync_error IS NOT NULL AND updated_at <= synced_at"),
+    changesAppliedCount: pullState.applied, changesLastOkAt: pullState.lastOkAt, changesError: pullState.lastError,
     lastTryAt: state.lastTryAt, lastOkAt: state.lastOkAt || db.prepare("SELECT MAX(synced_at) v FROM tx_log").get().v || null, lastError: state.lastError,
   };
 }
@@ -236,8 +303,9 @@ function recent(limit = 30) {
 let timer = null;
 function start() {
   if (timer) return;
-  timer = setInterval(() => { pushPending().catch(() => {}); }, INTERVAL_MS);
-  setTimeout(() => { pushPending().catch(() => {}); }, 5000);
+  const tick = async () => { await pushPending().catch(() => {}); await pullChanges().catch(() => {}); };
+  timer = setInterval(tick, INTERVAL_MS);
+  setTimeout(tick, 5000);
 }
 
-module.exports = { create, setStatus, attachSession, newOrderNo, pushPending, testConnection, status, recent, start, ready };
+module.exports = { create, setStatus, attachSession, newOrderNo, pushPending, pullChanges, applyChange, purgeGalleries, testConnection, status, recent, start, ready };
