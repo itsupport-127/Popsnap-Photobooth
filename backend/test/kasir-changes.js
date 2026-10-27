@@ -72,5 +72,29 @@ process.env.POPSNAP_DATA = fs.mkdtempSync(path.join(os.tmpdir(), "booth-"));
   r = await cloud.pullChanges({ force: true }); assert.strictEqual(r.applied, 0);
   assert.strictEqual(row("PB-ABC-261026-0002").amount, 20000);
   console.log("ok  edit lama tidak membatalkan hapus; transaksi milik booth lain diabaikan");
+  // 5) pendapatan hari ini untuk cloud-dashboard = sama dengan kasir (ikut edit & hapus)
+  db.prepare("DELETE FROM tx_log").run();
+  const d = new Date(); const ld = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  cloud.create({ orderNo: "PB-ABC-261027-0001", method: "qris", amount: 35000, status: "paid" });
+  cloud.create({ orderNo: "PB-ABC-261027-0002", method: "qris", amount: 25000, status: "paid" });
+  assert.strictEqual(cloud.todayRevenue(ld), 60000);
+  kasirChanges = [{ order_no: "PB-ABC-261027-0001", deleted: false, amount: 30000, status: "paid", method: "qris", paid_at: new Date().toISOString().replace("Z", "+00:00"), changed_at: "2026-10-27T10:00:00+07:00" }]; kasirCursor = "2026-10-27T10:00:00+07:00";
+  await cloud.pullChanges({ force: true }); assert.strictEqual(cloud.todayRevenue(ld), 55000, "edit kasir mengubah pendapatan");
+  assert(row("PB-ABC-261027-0001").paid_at.endsWith("Z"), "paid_at dinormalkan ke UTC");
+  let hooked = 0; cloud.setOnChanged(() => { hooked++; });
+  kasirChanges = [{ order_no: "PB-ABC-261027-0002", deleted: true, changed_at: "2026-10-27T11:00:00+07:00" }]; kasirCursor = "2026-10-27T11:00:00+07:00";
+  await cloud.pullChanges({ force: true }); assert.strictEqual(cloud.todayRevenue(ld), 30000, "hapus kasir mengurangi pendapatan");
+  assert.strictEqual(hooked, 1, "dashboard pusat dilapor segera setelah ada perubahan");
+  console.log("ok  pendapatan cloud-dashboard sama dengan kasir (edit & hapus), laporan segera");
+
+  // 6) transaksi lama yang sudah punya link galeri dikirim ulang sekali
+  db.prepare("INSERT INTO sessions (id, share_token) VALUES ('S-Z', 'ZTOKEN')").run();
+  cloud.create({ orderNo: "PB-ABC-261027-0003", method: "qris", amount: 1000, status: "paid", sessionId: "S-Z" });
+  db.prepare("UPDATE tx_log SET synced_at = updated_at").run();
+  cloud.backfillGalleryLinks(); assert.strictEqual(row("PB-ABC-261027-0003").synced_at, null);
+  db.prepare("UPDATE tx_log SET synced_at = updated_at").run(); cloud.backfillGalleryLinks();
+  assert(row("PB-ABC-261027-0003").synced_at, "backfill hanya sekali");
+  console.log("ok  backfill link galeri: sekali saja");
+
   kasir.close(); gallery.close(); process.exit(0);
 })().catch((e) => { console.error("GAGAL:", e); process.exit(1); });

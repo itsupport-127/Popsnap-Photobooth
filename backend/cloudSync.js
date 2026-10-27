@@ -206,6 +206,8 @@ let nudgeTimer = null;
 // Kasir = sumber angka resmi. Booth menarik perubahan lalu menyesuaikan tx_log; kalau transaksi dihapus,
 // sesi galeri cloud-nya ikut dihapus. Baris tx_log tetap disimpan (ditandai) supaya nomor transaksi tidak dipakai ulang.
 const CURSOR_KEY = "kasir_changes_cursor";
+let onChanged = null; // dipanggil setelah ada perubahan dari kasir (mis. segera lapor ke cloud-dashboard)
+const setOnChanged = (fn) => { onChanged = fn; };
 const pullState = { running: false, nextAt: 0, lastOkAt: null, lastError: null, applied: 0 };
 const getCursor = () => db.prepare("SELECT value FROM app_settings WHERE key = ?").get(CURSOR_KEY)?.value || "";
 const setCursor = (v) => db.prepare("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(CURSOR_KEY, String(v));
@@ -222,9 +224,10 @@ function applyChange(c) {
   }
   if (row.kasir_deleted_at) return false; // hapus tidak bisa dibatalkan oleh edit lama
   if (row.kasir_edited_at && new Date(row.kasir_edited_at) >= new Date(at)) return false; // sudah diterapkan
+  const paidIso = c.paid_at && !Number.isNaN(new Date(c.paid_at).getTime()) ? new Date(c.paid_at).toISOString() : null; // format sama dengan booth (UTC)
   // updated_at sengaja tidak diubah: ini bukan perubahan baru dari booth, jadi tidak perlu dikirim ulang ke kasir
   db.prepare("UPDATE tx_log SET template_name = ?, method = ?, amount = ?, status = ?, paid_at = ?, kasir_edited_at = ? WHERE order_no = ?")
-    .run(c.template_name ?? null, c.method ?? row.method, Number(c.amount) || 0, c.status ?? row.status, c.paid_at ?? row.paid_at, at, row.order_no);
+    .run(c.template_name ?? null, c.method ?? row.method, Number(c.amount) || 0, c.status ?? row.status, paidIso ?? row.paid_at, at, row.order_no);
   return true;
 }
 
@@ -259,6 +262,7 @@ async function pullChanges({ force = false } = {}) {
       if (list.length < 200 || !data.cursor || data.cursor === cursor) break;
     }
     await purgeGalleries();
+    if (applied > 0 && onChanged) { try { onChanged(); } catch { /* abaikan */ } }
     pullState.lastOkAt = nowIso(); pullState.lastError = null; pullState.nextAt = 0; pullState.applied += applied;
     return { ok: true, applied };
   } catch (err) {
@@ -266,6 +270,26 @@ async function pullChanges({ force = false } = {}) {
     pullState.nextAt = Date.now() + 60 * 1000;
     return { ok: false, error: pullState.lastError, applied };
   } finally { pullState.running = false; }
+}
+
+/**
+ * Pendapatan hari ini (tanggal lokal "YYYY-MM-DD") untuk cloud-dashboard.
+ * Dihitung dari tx_log supaya SAMA dengan kasir: transaksi lunas, tanpa yang dihapus di kasir, dan memakai nominal hasil edit kasir.
+ */
+function todayRevenue(localDate) {
+  const start = new Date(`${localDate}T00:00:00`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return db.prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM tx_log WHERE status = 'paid' AND kasir_deleted_at IS NULL AND paid_at >= ? AND paid_at < ?")
+    .get(start.toISOString(), end.toISOString()).total;
+}
+
+/** Sekali saja: kirim ulang transaksi lama yang sudah punya sesi galeri, supaya link galerinya sampai ke kasir. */
+function backfillGalleryLinks() {
+  const KEY = "kasir_gallery_backfill_v1";
+  if (db.prepare("SELECT 1 FROM app_settings WHERE key = ?").get(KEY)) return;
+  db.prepare(`UPDATE tx_log SET synced_at = NULL WHERE status = 'paid' AND kasir_deleted_at IS NULL
+    AND session_id IN (SELECT id FROM sessions WHERE share_token IS NOT NULL)`).run();
+  db.prepare("INSERT INTO app_settings (key, value) VALUES (?, '1')").run(KEY);
 }
 
 function nudge() { // kirim segera (setelah jeda singkat supaya perubahan beruntun dikirim sekaligus)
@@ -303,9 +327,10 @@ function recent(limit = 30) {
 let timer = null;
 function start() {
   if (timer) return;
+  try { backfillGalleryLinks(); } catch (e) { console.warn("[kasir-sync] backfill link galeri gagal:", e.message); }
   const tick = async () => { await pushPending().catch(() => {}); await pullChanges().catch(() => {}); };
   timer = setInterval(tick, INTERVAL_MS);
   setTimeout(tick, 5000);
 }
 
-module.exports = { create, setStatus, attachSession, newOrderNo, pushPending, pullChanges, applyChange, purgeGalleries, testConnection, status, recent, start, ready };
+module.exports = { create, setStatus, attachSession, newOrderNo, pushPending, pullChanges, applyChange, purgeGalleries, todayRevenue, setOnChanged, backfillGalleryLinks, testConnection, status, recent, start, ready };

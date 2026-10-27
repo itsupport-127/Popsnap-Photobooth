@@ -1696,7 +1696,7 @@ async function syncToCloud() {
     const store = db.prepare("SELECT * FROM store_settings WHERE id = 1").get();
     const today = localDate();
     const todaySessions = db.prepare("SELECT COUNT(*) as count FROM sessions WHERE created_at LIKE ?").get(`${today}%`).count;
-    const todayRevenue = db.prepare("SELECT COALESCE(SUM(gross_amount), 0) as total FROM payments WHERE status = 'paid' AND created_at LIKE ?").get(`${today}%`).total;
+    const todayRevenue = cloud.todayRevenue(today); // dari tx_log: sama dengan kasir (ikut edit & hapus di kasir)
     const totalSessionsAllTime = db.prepare("SELECT COUNT(*) as count FROM sessions").get().count;
 
     await fetch(`${config.cloudSyncUrl}/api/sync/report`, {
@@ -1716,6 +1716,7 @@ async function syncToCloud() {
     console.log("[cloud sync] Gagal lapor ke server pusat (normal kalau lagi offline):", err.message);
   }
 }
+cloud.setOnChanged(() => { syncToCloud(); }); // edit/hapus di kasir -> dashboard pusat ikut langsung, tidak menunggu 5 menit
 setInterval(syncToCloud, 5 * 60 * 1000);
 syncToCloud(); // langsung coba sekali pas backend baru nyala, gak nunggu 5 menit pertama
 // Jalan tiap 6 jam sekali, hapus session yang expires_at-nya sudah lewat.
