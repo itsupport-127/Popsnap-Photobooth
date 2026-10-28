@@ -168,6 +168,9 @@ const native = require("./nativeBridge");
 const get = (brand, model) => {
   const z = brand === "nikon" && /^Z/i.test(String(model || ""));
   const key = z ? "nikon-z" : brand;
+  const cur = bridges[key];
+  // model Nikon diganti di Pengaturan: program perantara yang masih jalan memakai model lama -> matikan, nanti dijalankan ulang
+  if (cur && cur.proc && brand === "nikon" && cur.model && cur.model !== model) { try { cur.send("QUIT"); const pr = cur.proc; setTimeout(() => pr.kill(), 800); cur.proc = null; } catch { /* abaikan */ } }
   if (!bridges[key]) bridges[key] = !z && native.EXE_BY_BRAND[brand] && native.findDir(brand, "-") ? new native.NativeBridge(brand) : new SdkBridge(brand);
   return bridges[key];
 };

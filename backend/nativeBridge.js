@@ -74,6 +74,7 @@ class NativeBridge {
 
   start(model) {
     if (this.proc) return null;
+    this.model = model;
     const f = findDir(this.brand, model);
     if (!f) return `${EXE_BY_BRAND[this.brand]} tidak ditemukan di sdk\\${this.brand}`;
     if (f.needModel) return "Model kamera Nikon belum dipilih di Pengaturan > Kamera.";

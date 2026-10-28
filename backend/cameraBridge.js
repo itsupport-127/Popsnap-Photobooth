@@ -203,6 +203,8 @@ function mount(app, { settingsStore }) {
     res.writeHead(200, { "Content-Type": "multipart/x-mixed-replace; boundary=popsnapframe", "Cache-Control": "no-store", Connection: "keep-alive" });
     try { res.socket?.setNoDelay(true); } catch { /* abaikan */ }
     const startedAt = Date.now();
+    // Status "live view menyala" bisa basi (kamera sempat dimatikan layar lain / setelah Setelan Kamera): paksa kirim START
+    if (b && Date.now() - (b.lastFrameAt || 0) > 2000) b.lvOn = false;
     let lastSent = 0;
     const put = (buf) => {
       const now = Date.now();
@@ -243,7 +245,13 @@ function mount(app, { settingsStore }) {
   app.post("/api/camera/dslr/liveview/stop", async (req, res) => {
     lvOn = false;
     const c0 = cfg();
-    if (c0.driver !== "digicam") { sdkBridge.get(c0.driver, c0.model).send("LIVEVIEW_STOP"); return res.json({ ok: true }); }
+    if (c0.driver !== "digicam") {
+      // Keluar dari Setelan Kamera / layar sesi mengirim "stop" yang bisa tiba SESUDAH layar lain membuka live view -> kamera
+      // dimatikan dan layar hitam. Tunda sebentar; jalankan hanya bila tak ada aliran lain yang sedang dipakai dan tidak sedang jepret.
+      const b0 = sdkBridge.get(c0.driver, c0.model);
+      setTimeout(() => { if (clients === 0 && capturing === 0) b0.send("LIVEVIEW_STOP"); }, 1500);
+      return res.json({ ok: true });
+    }
     await dcc("/?CMD=LiveViewWnd_Hide").catch(() => {});
     res.json({ ok: true });
   });
