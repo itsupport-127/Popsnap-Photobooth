@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Camera, Images, Video } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import RoundedQR from "../components/RoundedQR";
 import appConfig from "../config/appConfig";
 import useCountdown from "../hooks/useCountdown";
@@ -10,6 +11,9 @@ import { composeImage } from "../utils/composeImage";
 import { dataUrlToImageData, encodeGif } from "../utils/gif";
 import SesiDecor from "../components/SesiDecor";
 import useShape from "../hooks/useShape";
+import { printFinal, printingCfg } from "../services/printService";
+import { API_BASE } from "../services/settingsService";
+import { createPrintPayment, checkPaymentStatus } from "../services/paymentService";
 
 // Satuan desain: 1 = 1px pada kanvas 1728x1117 (lihat .strip-screen di index.css)
 const U = (n) => `calc(var(--u) * ${n})`;
@@ -27,9 +31,10 @@ export default function ResultScreen({ session, dispatch }) {
   const P = (l, p, q = l) => (portrait ? p : shape === "square" ? q : l);
   const s = appConfig.settings ?? {};
   const sharing = s.display?.sharing ?? { hideDone: false, iconsLocation: "right", showLabels: true };
-  const timeout = appConfig.timers.downloadQr;
+  const timeout = appConfig.timers.downloadQr || (offline ? 30 : 0); // tanpa QR harus ada timer, kalau tidak layar tertahan selamanya
   // Mode "preview": akhir sesi hanya menampilkan hasil + tombol selesai + timer (tanpa QR). Timer habis = kembali ke layar awal. Mode "qr" (bawaan): QR + kode unduh.
-  const previewOnly = sharing.mode === "preview";
+  const [offline, setOffline] = useState(false); // internet mati: tanpa QR, foto dikirim CS lewat WhatsApp
+  const previewOnly = sharing.mode === "preview" || offline;
   const isPhoto = session.mode === "photo";
   const R = { live: true, gif: true, defaultView: "photo", gifStyle: "template", gifHoldMs: 1800, ...(s.result ?? {}) }; // Admin > GIF & Video > Hasil Akhir
   const picked = useRef(false); // tamu sudah memilih tab sendiri -> jangan dipindah otomatis
@@ -43,8 +48,57 @@ export default function ResultScreen({ session, dispatch }) {
   const [attempt, setAttempt] = useState(0);
   const [shareUrl, setShareUrl] = useState(null); // halaman unduh /s/<token> (template animasi)
   const [animating, setAnimating] = useState(false);
+  // Cetak: tombol PRINT (pilih jumlah salinan) + cetak otomatis sekali per sesi
+  const pcfg = printingCfg();
+  const canPrint = isPhoto && !!pcfg?.enabled; // printer belum dipilih = printer bawaan Windows
+  const [step, setStep] = useState("main"); // main = layar hasil | copies = pilih jumlah Add Print | pay = bayar QRIS Add Print
+  const [copiesN, setCopiesN] = useState(1);
+  const [printMsg, setPrintMsg] = useState(null);
+  const autoPrinted = useRef(false);
+  async function doPrint(copies) {
+    setStep("main");
+    setPrintMsg({ t: "Mencetak…" });
+    const r = await printFinal({ dataUrl: finalImage, sessionId: session.sessionId, copies, template: session.selectedTemplate });
+    setPrintMsg({ t: r.ok ? `Dikirim ke printer (${copies}x) ✓` : r.error, err: !r.ok });
+    setTimeout(() => setPrintMsg(null), 5000);
+  }
+  // Add Print: gratis -> langsung cetak; berbayar -> QRIS dulu (dibayar di layar ini), lunas -> cetak otomatis
+  const [pay, setPay] = useState(null); // { copies, amount, qrString?, qrImageUrl?, error?, left }
+  const payRef = useRef(0);
+  async function addPrint(copies) {
+    if (!(pcfg.price > 0)) return doPrint(copies);
+    setStep("pay");
+    const ticket = ++payRef.current;
+    setPay({ copies, amount: pcfg.price * copies, left: 120 });
+    try {
+      const q = await createPrintPayment({ copies, sessionId: session.sessionId });
+      if (payRef.current !== ticket) return;
+      setPay((p) => p && { ...p, ...q });
+      for (let i = 0; i < 60 && payRef.current === ticket; i++) { // ~2 menit, cek tiap 2 detik
+        await new Promise((r) => setTimeout(r, 2000));
+        if (payRef.current !== ticket) return;
+        setPay((p) => p && { ...p, left: Math.max(0, 120 - (i + 1) * 2) });
+        const st = await checkPaymentStatus(q.orderId);
+        if (st === "paid") { payRef.current++; setPay(null); return doPrint(copies); } // doPrint kembali ke layar hasil
+        if (st === "expired") break;
+      }
+      if (payRef.current === ticket) setPay((p) => p && { ...p, error: "Waktu pembayaran habis." });
+    } catch (e) {
+      if (payRef.current === ticket) setPay((p) => p && { ...p, error: e.message });
+    }
+  }
+  const cancelPay = () => { payRef.current++; setPay(null); setStep("main"); };
+  useEffect(() => {
+    if (canPrint && pcfg.auto && finalImage && session.sessionId && !autoPrinted.current) { autoPrinted.current = true; doPrint(pcfg.autoCopies || 1); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalImage, session.sessionId]);
 
-  const { remaining } = useCountdown(timeout || 1, () => timeout && (setHideQr(true), dispatch({ type: "DONE" })), timeout > 0 && !hideQr);
+  useEffect(() => { // cek koneksi begitu layar akhir dibuka
+    let off = false;
+    fetch(`${API_BASE}/api/online`).then((r) => r.json()).then((d) => { if (!off && d.offline) setOffline(true); }).catch(() => {});
+    return () => { off = true; };
+  }, []);
+  const { remaining } = useCountdown(timeout || 1, () => timeout && (setHideQr(true), dispatch({ type: "DONE" })), timeout > 0 && !hideQr && step === "main");
 
   useEffect(() => {
     if (!isPhoto) return;
@@ -64,6 +118,7 @@ export default function ResultScreen({ session, dispatch }) {
         setFinalImage(composed);
         const up = await uploadSession({ ...session, finalImage: composed });
         if (cancelled) return;
+        if (up.offline) setOffline(true);
         dispatch({ type: "SET_DOWNLOAD_URL", payload: { url: up.downloadUrl } });
         dispatch({ type: "MERGE", payload: { sessionId: up.sessionId, uploadKey: up.uploadKey } });
 
@@ -142,7 +197,7 @@ export default function ResultScreen({ session, dispatch }) {
   const X = (x, w) => (flip && shape === "landscape" ? 1728 - x - w : x);
 
   // Panel QR (Done tepat di tengah bawah QR; tombol Foto | Live | GIF di tengah bawah kartu hasil)
-  const PANEL = { x: P(X(864, 648), 260, 520), y: P(308, 1130, 330), w: P(648, 560), h: P(596, 520) };
+  const PANEL = { x: P(X(864, 648), 260, 520), y: P(257, 1130, 330), w: P(648, 560), h: P(596, 520) };
   const fitStyle = { maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" };
   const preview = !isPhoto ? (
     session.media?.kind === "video" ? (
@@ -166,14 +221,15 @@ export default function ResultScreen({ session, dispatch }) {
   const box = previewOnly ? P({ x: 554, y: 150, w: 620, h: 700 }, { x: 160, y: 160, w: 760, h: 1300 }, { x: 320, y: 160, w: 560, h: 700 }) : portrait ? (isPhoto ? { x: 190, y: 200, w: 700, h: 780 } : { x: 180, y: 215, w: 720, h: 830 }) : shape === "square" ? (isPhoto ? { x: 60, y: 260, w: 390, h: 640 } : { x: 55, y: 250, w: 400, h: 660 }) : isPhoto ? { x: 215.5, y: 276, w: 437, h: 565 } : { x: 215, y: 207, w: 457, h: 703 };
 
   // Kartu hasil ikut bentuk template: template landscape -> kartu melebar, portrait -> kartu menjulang (posisi tengah desain dipertahankan)
-  const card = previewOnly ? P({ x: 494, y: 90, w: 740, h: 820 }, { x: 100, y: 100, w: 880, h: 1420 }, { x: 260, y: 100, w: 680, h: 820 }) : { x: P(175.5, 150, 30), y: P(177.5, 170, 230), w: P(517, 780, 450), h: P(763, 840, 700) };
+  const card = previewOnly ? P({ x: 494, y: 90, w: 740, h: 820 }, { x: 100, y: 100, w: 880, h: 1420 }, { x: 260, y: 100, w: 680, h: 820 }) : { x: P(194.5, 150, 30), y: P(224.5, 170, 230), w: P(479, 780, 450), h: P(669, 840, 700) };
   const tpl = session.selectedTemplate;
   const ta = tpl?.canvasWidth && tpl?.canvasHeight ? tpl.canvasWidth / tpl.canvasHeight : null;
   let boxF = box, cardF = card;
   if (isPhoto && ta) {
     const k = ta >= box.w / box.h ? { w: box.w, h: box.w / ta } : { w: box.h * ta, h: box.h };
     boxF = { x: box.x + (box.w - k.w) / 2, y: box.y + (box.h - k.h) / 2, w: k.w, h: k.h };
-    const padX = (card.w - box.w) / 2, padY = Math.min((card.h - box.h) / 2, padX);
+    const design = shape === "landscape" && !previewOnly; // desain: foto 2:3 di kartu 479x669 (jarak 50 / 52)
+    const padX = design ? 50 : (card.w - box.w) / 2, padY = design ? 52 : Math.min((card.h - box.h) / 2, padX);
     const w = k.w + padX * 2, h = k.h + padY * 2;
     cardF = { x: card.x + card.w / 2 - w / 2, y: card.y + card.h / 2 - h / 2, w, h };
   }
@@ -191,19 +247,20 @@ export default function ResultScreen({ session, dispatch }) {
       <div className="absolute inset-0"><SesiDecor /></div>
 
       <div className="strip-stage">
+        {step === "main" && (<>
         {timeout > 0 && !hideQr && (
-          <div className="pay-timer" role="timer" style={{ left: U(previewOnly ? CW / 2 - 95 : P(PANEL.x + PANEL.w / 2 - 95, 445, PANEL.x + PANEL.w / 2 - 95)), top: U(previewOnly ? P(24, 40, 28) : P(140, 112, 176)), width: U(190), height: U(54), fontSize: U(32) }}>{mm}.{ss}</div>
+          <div className="pay-timer" role="timer" style={{ left: U(previewOnly ? CW / 2 - 95 : P(PANEL.x + PANEL.w / 2 - 95, 445, PANEL.x + PANEL.w / 2 - 95)), top: U(previewOnly ? P(24, 40, 28) : P(70, 112, 176)), width: U(190), height: U(54), fontSize: U(32) }}>{mm}.{ss}</div>
         )}
 
         {/* Kartu hasil */}
-        <div style={{ left: U(shape === "landscape" && !previewOnly ? X(cardF.x, cardF.w) : cardF.x), top: U(cardF.y), width: U(cardF.w), height: U(cardF.h), background: "#fff", border: "3px solid #000", borderRadius: U(72.5), boxSizing: "border-box" }} />
+        <div style={{ left: U(shape === "landscape" && !previewOnly ? X(cardF.x, cardF.w) : cardF.x), top: U(cardF.y), width: U(cardF.w), height: U(cardF.h), background: "#fff", border: "3px solid #000", borderRadius: U(P(51.5, 72.5)), boxSizing: "border-box" }} />
         <div style={{ left: U(shape === "landscape" && !previewOnly ? X(boxF.x, boxF.w) : boxF.x), top: U(boxF.y), width: U(boxF.w), height: U(boxF.h), display: "flex", alignItems: "center", justifyContent: "center" }}>
           {preview}
         </div>
 
         {/* Judul */}
         {sharing.showLabels && !previewOnly && (
-          <div className="pay-title" style={{ left: U(P(X(858, 675), 202, PANEL.x + PANEL.w / 2 - 320)), top: U(P(214, 36, 250)), width: U(P(675, 675, 640)), height: U(69), fontSize: U(40) }}>SCAN HERE TO GET YOUR FILE</div>
+          <div className="pay-title" style={{ left: U(P(X(858, 675), 202, PANEL.x + PANEL.w / 2 - 320)), top: U(P(164, 36, 250)), width: U(P(675, 675, 640)), height: U(P(67, 69)), fontSize: U(40) }}>SCAN HERE TO GET YOUR FILE</div>
         )}
 
         {!previewOnly && (<>
@@ -248,16 +305,77 @@ export default function ResultScreen({ session, dispatch }) {
           <p style={{ left: U(previewOnly ? CW / 2 - 300 : PANEL.x), top: U(previewOnly ? belowY : P(1004, 1750, 1030)), margin: 0, fontSize: U(P(24, 22)), fontStyle: "italic", color: previewOnly ? "#fff" : "#55606E", width: U(previewOnly ? 600 : PANEL.w), textAlign: "center" }}>{previewOnly ? "Membuat video Live & GIF…" : "Membuat video Live & GIF… QR sudah bisa dipindai, file menyusul di halaman unduh."}</p>
         )}
 
-        {/* Done */}
-        {!sharing.hideDone && (
-          <button type="button" className="strip-btn" onClick={() => dispatch({ type: "DONE" })}
-            style={{ left: U(previewOnly ? CW / 2 - doneW / 2 : PANEL.x + PANEL.w / 2 - 110), top: U(previewOnly ? doneY : P(930, 1676, 954)), width: U(doneW), height: U(64), fontSize: U(36) }}>DONE</button>
+        {/* Tombol akhir (desain): Add Print (merah) + Finish (hijau) berdampingan di bawah QR */}
+        {(() => {
+          const showAdd = canPrint && pcfg.showButton && !!finalImage && !(offline && pcfg.price > 0); // Add Print berbayar butuh internet (QRIS)
+          const showFin = !sharing.hideDone;
+          const aw = P(297, 250), fw = P(260, 220), bh = P(69, 64), gap = P(103, 40), fs = P(40, 34);
+          const total = (showAdd ? aw : 0) + (showAdd && showFin ? gap : 0) + (showFin ? fw : 0);
+          const cx = previewOnly ? CW / 2 : PANEL.x + PANEL.w / 2;
+          const y = previewOnly ? doneY : P(885, 1676, 954);
+          const x0 = cx - total / 2;
+          return (<>
+            {showAdd && <button type="button" className="strip-btn" onClick={() => { setCopiesN(1); setStep("copies"); }}
+              style={{ left: U(x0), top: U(y), width: U(aw), height: U(bh), fontSize: U(fs), background: "#E02843", color: "#fff" }}>Add Print</button>}
+            {showFin && <button type="button" className="strip-btn" onClick={() => dispatch({ type: "DONE" })}
+              style={{ left: U(x0 + (showAdd ? aw + gap : 0)), top: U(y), width: U(fw), height: U(bh), fontSize: U(fs), background: "#ABDBAB", color: "#565656" }}>Finish</button>}
+            {printMsg && <p style={{ left: U(cx - 300), top: U(y + bh + 14), width: U(600), margin: 0, textAlign: "center", fontSize: U(24), fontStyle: "italic", fontWeight: 700, color: printMsg.err ? "#ffd0d0" : "#fff", textShadow: "0 1px 3px rgba(0,0,0,.4)" }}>{printMsg.t}</p>}
+          </>);
+        })()}
+        {offline && sharing.mode !== "preview" && (
+          <p style={{ left: U(CW / 2 - 420), top: U(doneY + (sharing.hideDone ? 0 : 64) + 24), width: U(840), margin: 0, textAlign: "center", fontSize: U(P(30, 32)), fontStyle: "italic", fontWeight: 700, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,.4)" }}>{sharing.offlineText || "Foto Anda akan dikirim oleh tim kami lewat WhatsApp."}</p>
         )}
         {previewOnly && error && (
           <div style={{ left: U(CW / 2 - 300), top: U(belowY), width: U(600), textAlign: "center", color: "#fff", fontWeight: 700, fontSize: U(26) }}>
             {error} <button onClick={() => setAttempt((n) => n + 1)} className="strip-btn" style={{ width: U(200), height: U(54), fontSize: U(26), marginLeft: U(12) }}>Coba lagi</button>
           </div>
         )}
+        </>)}
+
+        {/* ===== Add Print: pilih jumlah salinan (desain "ADD PRINT  − n +  NEXT") ===== */}
+        {step === "copies" && (() => {
+          const CH = P(1117, 1800, 1200), pw = P(882, 820), ph = 321;
+          const x0 = CW / 2 - pw / 2, y0 = CH / 2 - 197.5;
+          const pillW = pw - 303, pillX = x0 + (pw - pillW) / 2, maxN = Math.max(1, pcfg.copies || 1);
+          const circle = { position: "absolute", width: U(68), height: U(68), padding: 0, borderRadius: "50%", fontSize: U(60), lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#E02843", color: "#fff" };
+          const total = (pcfg.price || 0) * copiesN;
+          return (<>
+            <div className="strip-panel" style={{ left: U(x0), top: U(y0), width: U(pw), height: U(ph), borderRadius: U(57) }} />
+            <div className="pay-title" style={{ left: U(x0 + (pw - (pw - 207)) / 2), top: U(y0 + 43), width: U(pw - 207), height: U(67), fontSize: U(40) }}>ADD PRINT</div>
+            <div className="strip-tray" style={{ left: U(pillX), top: U(y0 + 138), width: U(pillW), height: U(120), borderRadius: U(60), display: "flex", alignItems: "center", justifyContent: "center", fontSize: U(110), fontWeight: 800, color: "#000" }}>{copiesN}</div>
+            <button type="button" className="strip-btn" aria-label="Kurangi" disabled={copiesN <= 1} onClick={() => setCopiesN((n) => Math.max(1, n - 1))} style={{ ...circle, left: U(pillX - 35), top: U(y0 + 168), opacity: copiesN <= 1 ? 0.55 : 1 }}>−</button>
+            <button type="button" className="strip-btn" aria-label="Tambah" disabled={copiesN >= maxN} onClick={() => setCopiesN((n) => Math.min(maxN, n + 1))} style={{ ...circle, left: U(pillX + pillW - 34), top: U(y0 + 168), opacity: copiesN >= maxN ? 0.55 : 1 }}>+</button>
+            {pcfg.price > 0 && <p style={{ left: U(x0), top: U(y0 + 268), width: U(pw), margin: 0, textAlign: "center", fontSize: U(30), fontStyle: "italic", fontWeight: 800, color: "#000" }}>Rp {Number(total).toLocaleString("id-ID")}</p>}
+            <button type="button" className="strip-btn" onClick={() => addPrint(copiesN)} style={{ left: U(CW / 2 - 90), top: U(y0 + 368), width: U(180), height: U(63), fontSize: U(36), background: "#E02843", color: "#fff" }}>NEXT</button>
+            <button type="button" onClick={() => setStep("main")} style={{ left: U(CW / 2 - 150), top: U(y0 + 368 + 63 + 22), width: U(300), height: U(50), background: "transparent", border: 0, color: "#fff", fontSize: U(28), fontStyle: "italic", fontWeight: 700, textDecoration: "underline" }}>Kembali</button>
+          </>);
+        })()}
+
+        {/* ===== Add Print: bayar QRIS (desain "SCAN HERE TO PAY ADD PRINT") ===== */}
+        {step === "pay" && pay && (() => {
+          const CH = P(1117, 1800, 1200), dy = CH / 2 - 558.5, px = CW / 2 - 324;
+          const qrSize = 430;
+          return (<>
+            <div className="pay-title" style={{ left: U(CW / 2 - 337.5), top: U(164 + dy), width: U(675), height: U(67), fontSize: U(40) }}>SCAN HERE TO PAY ADD PRINT</div>
+            <div className="strip-panel" style={{ left: U(px), top: U(257 + dy), width: U(648), height: U(596), borderRadius: 0 }} />
+            <div className="strip-tray" style={{ left: U(px + 18), top: U(275 + dy), width: U(612), height: U(560), borderRadius: U(85), display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+              {pay.error ? (
+                <p style={{ margin: 0, padding: `0 ${U(70)}`, fontSize: U(32), fontWeight: 700, color: "#B81C34" }}>{pay.error}</p>
+              ) : pay.qrImageUrl ? (
+                <img src={pay.qrImageUrl} alt="QRIS" style={{ width: U(qrSize), height: U(qrSize), objectFit: "contain" }} draggable={false} />
+              ) : pay.qrString ? (
+                <div style={{ width: U(qrSize), height: U(qrSize) }}><QRCodeSVG value={pay.qrString} style={{ width: "100%", height: "100%" }} /></div>
+              ) : (
+                <p style={{ margin: 0, fontSize: U(32), fontStyle: "italic", fontWeight: 700, color: "#55606E" }}>Menyiapkan QRIS…</p>
+              )}
+            </div>
+            <button type="button" className="strip-btn" onClick={() => { cancelPay(); setStep("copies"); }} style={{ left: U(CW / 2 - 330), top: U(885 + dy), width: U(297), height: U(69), fontSize: U(40), background: "#E02843", color: "#fff" }}>Add Print</button>
+            <button type="button" className="strip-btn" onClick={() => { cancelPay(); dispatch({ type: "DONE" }); }} style={{ left: U(CW / 2 + 70), top: U(885 + dy), width: U(260), height: U(69), fontSize: U(40), background: "#ABDBAB", color: "#565656" }}>Finish</button>
+            <p style={{ left: U(CW / 2 - Math.min(CW - 80, 1100) / 2), top: U(972 + dy), width: U(Math.min(CW - 80, 1100)), margin: 0, textAlign: "center", fontSize: U(26), fontStyle: "italic", fontWeight: 700, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,.4)" }}>
+              {pay.copies} salinan · Rp {Number(pay.amount).toLocaleString("id-ID")}{pay.error ? "" : ` · otomatis tercetak setelah lunas (${pay.left} dtk)`}
+            </p>
+          </>);
+        })()}
       </div>
     </div>
   );

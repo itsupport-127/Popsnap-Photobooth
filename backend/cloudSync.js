@@ -55,7 +55,7 @@ function templateInfo(templateId) {
   return { name: t?.name ?? null, category: t?.category ?? null };
 }
 
-const MODE_NAME = { gif: "GIF", boomerang: "Boomerang", video: "Video" };
+const MODE_NAME = { gif: "GIF", boomerang: "Boomerang", video: "Video", addprint: "Add Print" };
 
 /**
  * Catat transaksi baru.

@@ -1002,6 +1002,97 @@ app.get("/api/settings/public", async (req, res) => {
   res.json({ storeName: store?.store_name, ...kiosk, payment: { mode: pay.mode, methods: pay.methods, online: pay.online } });
 });
 
+// ---------- IZIN SOSMED ----------
+// Tamu menjawab "boleh dipakai di sosmed?" di booth. Jawabannya menandai folder sesi (BOLEH-SOSMED.txt / TIDAK-SOSMED.txt) dan,
+// kalau boleh, semua file sesi disalin ke output/_BOLEH-SOSMED/<tanggal>_<id>/ supaya content creator tinggal membuka satu folder.
+const SOSMED_DIR = "_BOLEH-SOSMED";
+function findSessionFolder(id) {
+  try {
+    for (const d of fs.readdirSync(outputDir()).sort().reverse()) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+      const p = path.join(outputDir(), d, id);
+      if (fs.existsSync(p)) return { date: d, dir: p };
+    }
+  } catch { /* folder keluaran belum ada */ }
+  return null;
+}
+function copyMissing(from, to) { // salin hanya file yang belum ada / beda ukuran (aman dipanggil berulang)
+  fs.mkdirSync(to, { recursive: true });
+  for (const e of fs.readdirSync(from, { withFileTypes: true })) {
+    if (/-SOSMED\.txt$/.test(e.name)) continue;
+    const a = path.join(from, e.name), b = path.join(to, e.name);
+    if (e.isDirectory()) copyMissing(a, b);
+    else { try { if (!fs.existsSync(b) || fs.statSync(b).size !== fs.statSync(a).size) fs.copyFileSync(a, b); } catch { /* file sedang ditulis: coba lagi nanti */ } }
+  }
+}
+function syncSocial(id) {
+  const row = db.prepare("SELECT social_consent FROM sessions WHERE id = ?").get(id);
+  const f = findSessionFolder(id);
+  if (!row || !f) return;
+  const copy = path.join(outputDir(), SOSMED_DIR, `${f.date}_${id}`);
+  for (const n of ["BOLEH-SOSMED.txt", "TIDAK-SOSMED.txt"]) { try { fs.rmSync(path.join(f.dir, n), { force: true }); } catch { /* abaikan */ } }
+  if (row.social_consent === 1) {
+    fs.writeFileSync(path.join(f.dir, "BOLEH-SOSMED.txt"), "Tamu mengizinkan foto sesi ini dibagikan di sosmed atau dipajang di toko.\r\n");
+    copyMissing(f.dir, copy);
+  } else {
+    if (row.social_consent === 0) fs.writeFileSync(path.join(f.dir, "TIDAK-SOSMED.txt"), "Tamu TIDAK mengizinkan foto sesi ini dibagikan di sosmed atau dipajang di toko.\r\n");
+    try { fs.rmSync(copy, { recursive: true, force: true }); } catch { /* abaikan */ }
+  }
+}
+// File GIF / video / klip menyusul beberapa saat setelah sesi selesai -> sinkron ulang beberapa kali
+function scheduleSocial(id) {
+  for (const ms of [0, 90000, 360000]) setTimeout(() => { try { syncSocial(id); } catch (e) { console.error("[sosmed]", e.message); } }, ms);
+}
+app.get("/api/social/list", requirePerm("settings.manage"), (req, res) => {
+  const days = Math.max(1, Math.min(365, Number(req.query.days) || 30));
+  const st = String(req.query.status || "allowed");
+  const cond = st === "denied" ? "social_consent = 0" : st === "unknown" ? "social_consent IS NULL" : st === "all" ? "1=1" : "social_consent = 1";
+  const rows = db.prepare(`SELECT id, mode, final_image_path, gif_path, video_path, share_token, social_consent, created_at FROM sessions WHERE ${cond} AND created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT 500`).all(`-${days} days`);
+  const items = rows.map((r) => {
+    const f = findSessionFolder(r.id);
+    if (r.social_consent === 1) { try { syncSocial(r.id); } catch { /* abaikan */ } }
+    const main = r.final_image_path || r.gif_path || r.video_path;
+    return { id: r.id, mode: r.mode, consent: r.social_consent, createdAt: r.created_at, previewUrl: main ? publicFileUrl(main) : null, isVideo: !r.final_image_path && !r.gif_path && !!r.video_path,
+      folder: f ? f.dir : null, socialFolder: f && r.social_consent === 1 ? path.join(outputDir(), SOSMED_DIR, `${f.date}_${r.id}`) : null };
+  });
+  res.json({ items, root: path.join(outputDir(), SOSMED_DIR) });
+});
+app.post("/api/social/:id", requirePerm("settings.manage"), (req, res) => {
+  const id = String(req.params.id);
+  if (!SAFE_ID.test(id)) return res.status(400).json({ error: "Id sesi tidak valid." });
+  if (!db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(id)) return res.status(404).json({ error: "Sesi tidak ditemukan." });
+  const a = req.body?.allowed;
+  const v = a === true ? 1 : a === false ? 0 : null;
+  db.prepare("UPDATE sessions SET social_consent = ? WHERE id = ?").run(v, id);
+  try { syncSocial(id); } catch (e) { console.error("[sosmed]", e.message); }
+  logActivity(req.user, "social.consent", id, { izin: v === 1 ? "boleh" : v === 0 ? "tidak" : "belum" }, req);
+  res.json({ ok: true, consent: v });
+});
+
+// ---------- CETAK ----------
+// Pencetakannya sendiri dilakukan aplikasi desktop (Electron); backend hanya mencatat jumlah cetak supaya batas per sesi / per event berlaku.
+function printQuota(sessionId) {
+  const pr = settingsStore.load().printing;
+  const total = db.prepare("SELECT COALESCE(SUM(copies),0) n FROM print_jobs").get().n;
+  const sess = sessionId ? db.prepare("SELECT COALESCE(SUM(copies),0) n FROM print_jobs WHERE session_id = ?").get(String(sessionId)).n : 0;
+  let allowed = 99;
+  if (pr.limit.enabled) allowed = Math.max(0, Math.min(pr.limit.perSession - sess, pr.limit.perEvent - total));
+  return { allowed, session: sess, total, limit: pr.limit.enabled ? { perSession: pr.limit.perSession, perEvent: pr.limit.perEvent } : null };
+}
+app.get("/api/print/quota", (req, res) => res.json(printQuota(req.query.sessionId)));
+app.post("/api/print/record", (req, res) => {
+  const copies = Math.max(1, Math.min(9, Math.round(Number(req.body?.copies) || 1)));
+  const q = printQuota(req.body?.sessionId);
+  if (copies > q.allowed) return res.status(429).json({ error: "Batas cetak tercapai.", ...q });
+  db.prepare("INSERT INTO print_jobs (session_id, printer, copies) VALUES (?, ?, ?)").run(String(req.body?.sessionId || "").slice(0, 80), String(req.body?.printer || "").slice(0, 200), copies);
+  res.json(printQuota(req.body?.sessionId));
+});
+app.post("/api/print/reset", requirePerm("settings.manage"), (req, res) => {
+  db.prepare("DELETE FROM print_jobs").run();
+  logActivity(req.user, "print.reset", "hitungan cetak event", null, req);
+  res.json(printQuota(null));
+});
+
 // PIN keluar dari layar penuh. Dibatasi 5 salah per menit (dengan jeda) supaya tidak bisa ditebak dari layar.
 let pinFails = [];
 app.post("/api/kiosk/verify-pin", (req, res) => {
@@ -1020,14 +1111,14 @@ app.get("/api/settings", requirePerm("settings.manage", "payment.gateway"), (req
   const full = settingsStore.forAdmin();
   for (const f of full.editor?.filters ?? []) if (f.lut?.url) f.lut.url = toFullUrl(f.lut.url);
   if (!req.user.permissions.includes("payment.gateway")) delete full.payment;
-  if (!req.user.permissions.includes("settings.manage")) { for (const k of ["event", "editor", "general", "camera", "display", "session", "gif", "result", "boomerang", "video", "animated"]) delete full[k]; }
+  if (!req.user.permissions.includes("settings.manage")) { for (const k of ["event", "editor", "general", "camera", "printing", "display", "session", "gif", "result", "boomerang", "video", "animated"]) delete full[k]; }
   res.json(full);
 });
 
 app.put("/api/settings", requirePerm("settings.manage", "payment.gateway"), (req, res) => {
   const body = req.body ?? {};
   const can = (p) => req.user.permissions.includes(p);
-  const touchesGeneral = body.event || body.editor || body.general || body.camera || body.display || body.session || body.gif || body.result || body.boomerang || body.video || body.animated;
+  const touchesGeneral = body.event || body.editor || body.general || body.camera || body.printing || body.display || body.session || body.gif || body.result || body.boomerang || body.video || body.animated;
   if (touchesGeneral && !can("settings.manage")) return res.status(403).json({ error: "Akun kamu tidak boleh mengubah pengaturan umum." });
   if (body.payment && !can("payment.gateway")) return res.status(403).json({ error: "Akun kamu tidak boleh mengubah pengaturan payment gateway." });
   const before = JSON.parse(JSON.stringify(settingsStore.load()));
@@ -1330,8 +1421,17 @@ function archiveFolder(id) {
   return folder;
 }
 
-app.post("/api/session/finish", (req, res) => {
-  const { sessionId, templateId, finalImage, shots, paymentMethod } = req.body ?? {};
+// Booth offline? Layar akhir lalu tanpa QR (foto dikirim CS lewat WhatsApp setelah diupload). Pengaturan: Tampilan > Mode offline.
+async function boothOffline() {
+  const m = settingsStore.load().display.sharing.offline || "auto";
+  if (m === "force") return true;
+  if (m === "off") return false;
+  return !(await checkOnline());
+}
+app.get("/api/online", async (req, res) => res.json({ offline: await boothOffline() }));
+
+app.post("/api/session/finish", async (req, res) => {
+  const { sessionId, templateId, finalImage, shots, paymentMethod, socialConsent } = req.body ?? {};
   // sessionId datang dari browser -> JANGAN dipakai mentah-mentah sebagai nama file/folder (bisa "../../x").
   const id = SAFE_ID.test(String(sessionId ?? "")) ? String(sessionId) : nanoid();
   const key = nanoid(24);
@@ -1360,6 +1460,7 @@ app.post("/api/session/finish", (req, res) => {
   // ?? null WAJIB ada — node:sqlite melempar error kalau parameter `undefined`.
   sessionKeys.set(id, { key, until: Date.now() + 60 * 60 * 1000 });
   cloud.attachSession({ sessionId: id, ref: SAFE_ID.test(String(sessionId ?? "")) ? String(sessionId) : null, templateId, mode: "photo", paymentMethod });
+  if (typeof socialConsent === "boolean") db.prepare("UPDATE sessions SET social_consent = ? WHERE id = ?").run(socialConsent ? 1 : 0, id);
   const realToken = db.prepare("SELECT share_token FROM sessions WHERE id = ?").get(id)?.share_token || shareToken; // sesi diulang: pakai token yang sudah tersimpan
   gallery.enqueue(id, realToken, "photo");
 
@@ -1392,7 +1493,9 @@ app.post("/api/session/finish", (req, res) => {
     console.error("[output] Gagal simpan arsip lokal:", err.message);
   }
 
-  res.json({ sessionId: id, uploadKey: key, downloadUrl: publicFileUrl(finalImagePath), shareUrl: gallery.shareUrlFor(realToken) || (realToken ? publicFileUrl(`/s/${realToken}`) : null), expiresAt });
+  if (typeof socialConsent === "boolean") scheduleSocial(id);
+  const offline = await boothOffline();
+  res.json({ offline, sessionId: id, uploadKey: key, downloadUrl: publicFileUrl(finalImagePath), shareUrl: gallery.shareUrlFor(realToken) || (realToken ? publicFileUrl(`/s/${realToken}`) : null), expiresAt });
 });
 
 // Unggah GIF / boomerang / video (isi mentah, bukan JSON — video bisa puluhan MB).
@@ -1449,6 +1552,7 @@ app.post("/api/session/media", express.raw({ type: () => true, limit: "300mb" })
     if (mediaShareToken) gallery.enqueue(id, mediaShareToken, kind);
     const ref = SAFE_ID.test(String(req.query.orderNo ?? "")) ? String(req.query.orderNo) : null;
     cloud.attachSession({ sessionId: id, ref, mode: kind, paymentMethod: req.query.paymentMethod ? String(req.query.paymentMethod) : null });
+    if (req.query.social === "1" || req.query.social === "0") { db.prepare("UPDATE sessions SET social_consent = ? WHERE id = ?").run(req.query.social === "1" ? 1 : 0, id); scheduleSocial(id); }
   }
 
   try {
@@ -1517,8 +1621,9 @@ require("./sharePage").mount(app, { db, backendDir: config.dataDir, getStoreName
 // (BUKAN dari input klien) supaya harga tidak bisa dimanipulasi dari browser.
 app.post("/api/payment/qris", async (req, res) => {
   const { templateId, mode } = req.body ?? {};
+  const isPrint = req.body?.kind === "print"; // Add Print: bayar cetakan tambahan di akhir sesi
   const modeKey = ["gif", "boomerang", "video"].includes(mode) ? mode : null;
-  if (!modeKey && !templateId) return res.status(400).json({ error: "templateId wajib diisi." });
+  if (!isPrint && !modeKey && !templateId) return res.status(400).json({ error: "templateId wajib diisi." });
 
   // Tolak kalau QRIS tidak aktif / internet mati — mencegah "gratis" lewat simulasi tak sengaja
   const pay = await paymentState();
@@ -1529,7 +1634,13 @@ app.post("/api/payment/qris", async (req, res) => {
   // Harga SELALU dari server: harga template (mode foto) atau harga mode (GIF/Boomerang/Video) — bukan dari browser.
   let grossAmount;
   let orderTemplateId = null;
-  if (modeKey) {
+  if (isPrint) {
+    const pr = settingsStore.load().printing;
+    if (!pr.enabled || !pr.showButton) return res.status(403).json({ error: "Add Print tidak aktif." });
+    const copies = Math.max(1, Math.min(9, Math.round(Number(req.body?.copies) || 1)));
+    grossAmount = (pr.price || 0) * copies;
+    if (grossAmount <= 0) return res.status(400).json({ error: "Add Print gratis / belum diberi harga." });
+  } else if (modeKey) {
     const cfg = settingsStore.load().general.modes[modeKey];
     if (!cfg.enabled) return res.status(403).json({ error: "Mode ini tidak aktif." });
     grossAmount = cfg.price || 0;
@@ -1544,7 +1655,7 @@ app.post("/api/payment/qris", async (req, res) => {
     }
   }
   // Nomor transaksi PB-<studio>-<tanggal>-<urut>: dipakai sebagai order_id Midtrans, id sesi, dan nomor di aplikasi kasir.
-  const txMode = modeKey || "photo";
+  const txMode = isPrint ? "addprint" : modeKey || "photo";
   const newTx = () => cloud.create({ method: "qris", mode: txMode, templateId: orderTemplateId, amount: grossAmount, status: "pending" });
 
   // ---- Mode SIMULASI (hanya kalau diaktifkan manual di pengaturan) ----

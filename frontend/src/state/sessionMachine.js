@@ -26,6 +26,7 @@ export const STATES = {
   TEMPLATE_CATEGORY: "TEMPLATE_CATEGORY",
   TEMPLATE_SELECT: "TEMPLATE_SELECT",
   PAYMENT: "PAYMENT",
+  CONSENT: "CONSENT",             // izin dipakai di sosmed (opsional, Admin > Umum), setelah bayar & sebelum pengumuman
   REMINDER: "REMINDER",           // layar pengingat setelah bayar, sebelum sesi (Admin > Tampilan)
   PHOTO_SESSION: "PHOTO_SESSION",
   MEDIA_CAPTURE: "MEDIA_CAPTURE", // sesi GIF / Boomerang / Video
@@ -65,7 +66,12 @@ export function createInitialSession() {
 const cfgNow = () => appConfig.settings ?? {};
 
 /** Setelah pembayaran: tampilkan layar pengingat dulu (kalau diaktifkan), baru sesi. */
+function nextAfterConsent(mode) {
+  if (cfgNow().display?.reminder?.enabled) return STATES.REMINDER;
+  return mode === "photo" ? STATES.PHOTO_SESSION : STATES.MEDIA_CAPTURE;
+}
 function nextAfterPayment(mode) {
+  if (cfgNow().general?.consent?.enabled) return STATES.CONSENT; // tanya izin sosmed dulu
   if (cfgNow().display?.reminder?.enabled) return STATES.REMINDER;
   return mode === "photo" ? STATES.PHOTO_SESSION : STATES.MEDIA_CAPTURE;
 }
@@ -178,6 +184,9 @@ export function sessionReducer(session, action) {
         state: STATES.TEMPLATE_SELECT,
       };
     }
+
+    // ---------- CONSENT (izin sosmed) ----------
+    case "CONSENT_DONE": return { ...session, socialConsent: action.payload?.allowed === true ? true : action.payload?.allowed === false ? false : null, state: nextAfterConsent(session.mode) };
 
     // ---------- REMINDER ----------
     case "REMINDER_DONE": {

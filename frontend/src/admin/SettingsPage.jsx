@@ -8,6 +8,7 @@ import SettingsCamera from "./settings/SettingsCamera";
 import SettingsDisplay from "./settings/SettingsDisplay";
 import SettingsFilters from "./settings/SettingsFilters";
 import SettingsMedia from "./settings/SettingsMedia";
+import SettingsPrinting from "./settings/SettingsPrinting";
 
 const TABS = [
   ["general", "Umum", "gear"],
@@ -15,6 +16,7 @@ const TABS = [
   ["display", "Tampilan", "image"],
   ["filters", "Filter", "star"],
   ["media", "GIF & Video", "ticket"],
+  ["printing", "Cetak", "printer"],
 ];
 
 export default function SettingsPage() {
@@ -55,8 +57,8 @@ export default function SettingsPage() {
     try {
       const security = pin.clear ? { clearPin: true } : pin.value ? { pin: pin.value } : undefined;
       const body = {
-        event: s.event, editor: s.editor, camera: s.camera, display: s.display, session: s.session, gif: s.gif, result: s.result, boomerang: s.boomerang, video: s.video, animated: s.animated,
-        general: { modes: s.general.modes, dataDir: s.general.dataDir ?? "", virtualKeyboard: s.general.virtualKeyboard, disclaimer: s.general.disclaimer, export: s.general.export, ...(security ? { security } : {}) },
+        event: s.event, editor: s.editor, camera: s.camera, printing: s.printing, display: s.display, session: s.session, gif: s.gif, result: s.result, boomerang: s.boomerang, video: s.video, animated: s.animated,
+        general: { modes: s.general.modes, dataDir: s.general.dataDir ?? "", virtualKeyboard: s.general.virtualKeyboard, disclaimer: s.general.disclaimer, consent: s.general.consent, export: s.general.export, ...(security ? { security } : {}) },
       };
       const res = await saveAdminSettings(body);
       if (res) { setS(res); original.current = JSON.stringify(res); }
@@ -90,6 +92,7 @@ export default function SettingsPage() {
         {tab === "display" && <SettingsDisplay s={s} set={set} setError={setError} />}
         {tab === "filters" && <SettingsFilters s={s} set={set} />}
         {tab === "media" && <SettingsMedia s={s} set={set} />}
+        {tab === "printing" && <SettingsPrinting s={s} set={set} />}
         {tab === "general" && (
           <div className="grid grid-cols-[210px_1fr] gap-x-4 items-center">
             <div className="text-[13px] text-[#181B23] text-right">Nama toko / studio</div>

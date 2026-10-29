@@ -51,6 +51,8 @@ export const testGallery = () => request("/api/gallery/test", { method: "POST" }
 export const getGalleryArchive = (days = 14) => request(`/api/gallery/archive?days=${days}`);
 export const uploadGalleryArchive = (date, id, redo = false) => request("/api/gallery/archive/upload", { method: "POST", body: { date, id, redo } });
 export const syncGalleryNow = () => request("/api/gallery/sync", { method: "POST" });
+export const getPrintStats = () => request("/api/print/quota");
+export const resetPrintCount = () => request("/api/print/reset", { method: "POST" });
 export const getOverview = () => request("/api/admin/overview");
 
 export const listVouchers = () => request("/api/voucher/list");

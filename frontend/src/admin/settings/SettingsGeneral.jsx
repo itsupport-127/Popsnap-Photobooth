@@ -74,6 +74,15 @@ export default function SettingsGeneral({ s, set, pin, setPin, outputDir }) {
         </Row>
       </Card>
 
+      <Card title="IZIN FOTO (SOSMED & DIPAJANG DI TOKO)" hint="Layar tambahan setelah pembayaran dan sebelum pengumuman. Hasilnya bisa dilihat di menu Sosmed.">
+        <Row label="Izin foto" hint="Setelah bayar (sebelum pengumuman), tamu ditanya boleh atau tidak fotonya dibagikan di sosmed atau dipajang di toko. Folder sesi ditandai dan yang BOLEH disalin ke folder _BOLEH-SOSMED. Tidak dijawab = tidak boleh."><Check checked={g.consent.enabled} onChange={(v) => set(["general", "consent", "enabled"], v)} label="Tanya izin foto ke tamu" /></Row>
+        {g.consent.enabled && (<>
+          <Row label="Judul"><input className={inputCls} maxLength={40} value={g.consent.title} onChange={(e) => set(["general", "consent", "title"], e.target.value)} /></Row>
+          <Row label="Pertanyaan"><input className={inputCls} maxLength={200} value={g.consent.text} onChange={(e) => set(["general", "consent", "text"], e.target.value)} /></Row>
+          <Row label="Batas waktu (detik)" hint="5–120. Lewat batas dianggap Tidak."><div className="w-28"><NumInput value={g.consent.seconds} min={5} onCommit={(v) => set(["general", "consent", "seconds"], Math.round(v))} /></div></Row>
+        </>)}
+      </Card>
+
       <Card title="DISCLAIMER" hint="Ditampilkan setelah tamu menekan Start. Kalau tidak setuju, sesi dibatalkan sebelum pembayaran.">
         <Row label="Enable"><Check checked={g.disclaimer.enabled} onChange={(v) => set(["general", "disclaimer", "enabled"], v)} label="Wajibkan tamu menyetujui ketentuan sebelum mulai" /></Row>
         <Row label="Header"><input className={`${inputCls} ${g.disclaimer.enabled ? "" : "opacity-50"}`} maxLength={120} value={g.disclaimer.header} onChange={(e) => set(["general", "disclaimer", "header"], e.target.value)} /></Row>

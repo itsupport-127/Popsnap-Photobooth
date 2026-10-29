@@ -20,6 +20,7 @@
       "main.js",
       "preload.js",
       "dslrBridge.js",
+      "printer.js",
       "pinPreload.js",
       "pinWindow.html"
     ],

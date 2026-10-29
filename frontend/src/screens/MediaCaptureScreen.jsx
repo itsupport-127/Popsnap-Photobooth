@@ -35,7 +35,7 @@ export default function MediaCaptureScreen({ session, dispatch }) {
   async function finish(blob, kind, previewUrl) {
     setStage("processing");
     try {
-      const r = await uploadMedia(blob, kind, { paymentMethod: session.paymentMethod, orderNo: session.sessionId });
+      const r = await uploadMedia(blob, kind, { paymentMethod: session.paymentMethod, orderNo: session.sessionId, social: session.socialConsent });
       dispatch({ type: "MEDIA_DONE", payload: { url: r.shareUrl || r.downloadUrl, previewUrl, kind: mode, sessionId: r.sessionId, uploadKey: r.uploadKey } });
     } catch (err) {
       setError(err.message);

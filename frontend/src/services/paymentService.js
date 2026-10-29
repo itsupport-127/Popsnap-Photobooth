@@ -21,6 +21,18 @@ export async function createQrisPayment({ templateId, mode }) {
   return data; // { orderId, qrImageUrl | qrString, amount }
 }
 
+/** Add Print berbayar: QRIS untuk N salinan cetak tambahan (harga dihitung server dari pengaturan). */
+export async function createPrintPayment({ copies, sessionId }) {
+  const res = await fetch(`${API_BASE}/api/payment/qris`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "print", copies, sessionId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Gagal membuat QRIS.");
+  return data; // { orderId, qrImageUrl | qrString, amount }
+}
+
 export async function checkPaymentStatus(orderId) {
   try {
     const res = await fetch(`${API_BASE}/api/payment/status/${orderId}`);

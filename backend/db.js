@@ -188,6 +188,7 @@ for (const r of db.prepare("SELECT DISTINCT category FROM templates WHERE catego
 ensureColumn("templates", "favorite", "INTEGER NOT NULL DEFAULT 0");
 // Mode booth: photo | gif | boomerang | video, plus file GIF (dari mode foto) & video
 ensureColumn("sessions", "mode", "TEXT NOT NULL DEFAULT 'photo'");
+ensureColumn("sessions", "social_consent", "INTEGER"); // izin dipakai di sosmed: NULL = belum ditanya / tidak dijawab, 1 = boleh, 0 = tidak
 ensureColumn("sessions", "gif_path", "TEXT");
 ensureColumn("sessions", "video_path", "TEXT");
 ensureColumn("sessions", "share_token", "TEXT");          // token acak untuk halaman unduh /s/<token>
@@ -238,6 +239,18 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_activity_at ON activity_log (at);
   CREATE INDEX IF NOT EXISTS idx_activity_action ON activity_log (action);
+`);
+
+// Catatan cetak (untuk batas cetak per sesi / per event)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS print_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT,
+    printer TEXT,
+    copies INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_print_session ON print_jobs (session_id);
 `);
 
 // Pengaturan aplikasi (1 baris JSON): pembayaran, event, kamera, timer sesi, kunci API kasir

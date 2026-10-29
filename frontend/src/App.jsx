@@ -12,6 +12,7 @@ import AdminApp from "./admin/AdminApp";
 import useCameraStatus from "./hooks/useCameraStatus";
 import { KioskProvider } from "./hooks/useKiosk";
 import ReminderScreen from "./screens/ReminderScreen";
+import ConsentScreen from "./screens/ConsentScreen";
 import DisclaimerScreen from "./screens/DisclaimerScreen";
 import MediaCaptureScreen from "./screens/MediaCaptureScreen";
 import KioskLock from "./components/KioskLock";
@@ -124,6 +125,7 @@ function KioskApp() {
 
       {session.state === STATES.DISCLAIMER && <DisclaimerScreen dispatch={dispatch} />}
 
+      {session.state === STATES.CONSENT && <ConsentScreen dispatch={dispatch} />}
       {session.state === STATES.REMINDER && <ReminderScreen session={session} dispatch={dispatch} />}
 
       {session.state === STATES.MEDIA_CAPTURE && <MediaCaptureScreen session={session} dispatch={dispatch} />}

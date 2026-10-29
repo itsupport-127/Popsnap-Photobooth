@@ -32,6 +32,7 @@ export async function uploadSession(session) {
       templateId: session.selectedTemplate?.id,
       paymentMethod: session.paymentMethod,
       finalImage: session.finalImage,
+      socialConsent: typeof session.socialConsent === "boolean" ? session.socialConsent : undefined, // izin dipakai di sosmed (layar Izin Sosmed)
       shots,
     }),
   });
@@ -44,10 +45,11 @@ export async function uploadSession(session) {
  * Unggah GIF / boomerang / video (isi mentah). Tanpa `sessionId` = sesi baru (mode GIF/Boomerang/Video).
  * Dengan sessionId + uploadKey = tambahan GIF untuk sesi foto.
  */
-export async function uploadMedia(blob, kind, { sessionId, uploadKey, paymentMethod, orderNo } = {}) {
+export async function uploadMedia(blob, kind, { sessionId, uploadKey, paymentMethod, orderNo, social } = {}) {
   const qs = new URLSearchParams({ kind });
   if (sessionId) { qs.set("sessionId", sessionId); qs.set("key", uploadKey ?? ""); }
   if (paymentMethod) qs.set("paymentMethod", paymentMethod);
+  if (typeof social === "boolean") qs.set("social", social ? "1" : "0");
   if (orderNo) qs.set("orderNo", orderNo); // nomor transaksi (QRIS/voucher) supaya sesi ini terhubung ke riwayat kasir
   const res = await fetch(`${API_BASE}/api/session/media?${qs}`, {
     method: "POST",

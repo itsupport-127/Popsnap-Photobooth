@@ -23,6 +23,8 @@ const DEFAULTS = {
     kbSeeded: false,   // migrasi sekali: pengaturan lama "off" (bawaan lama) dinyalakan ke keyboard layar POPSNAP
     virtualKeyboard: "builtin", // off = keyboard fisik / bawaan perangkat | builtin = keyboard layar POPSNAP | windows = keyboard sentuh Windows (dibuka otomatis di aplikasi desktop)
     security: { pinHash: "", pinSalt: "", pinSeeded: false, pinDefault: false }, // PIN keluar dari layar penuh; disimpan ter-hash
+    // Izin sosmed: tamu ditanya setelah bayar (sebelum pengumuman). Jawaban menandai folder sesi (BOLEH / TIDAK) untuk content creator.
+    consent: { enabled: false, title: "IZIN FOTO", text: "Hai kak! Boleh fotonya kami bagikan di sosmed atau dipajang di mading toko? Pilih saja, boleh atau tidak sama-sama tidak masalah.", seconds: 20 },
     disclaimer: {
       enabled: false,
       header: "Setuju dengan ketentuan?",
@@ -31,6 +33,24 @@ const DEFAULTS = {
     // Ekspor real-time: salin hasil ke folder lain (flashdisk / folder cloud) begitu sesi selesai
     dataDir: "", // folder arsip permanen (kosong = bawaan / OUTPUT_DIR di .env)
     export: { enabled: false, dir: "", prints: true, originals: true, gifs: true, videos: true },
+  },
+
+  // ---- CETAK (printer utama / kedua; printer sharing Windows maupun langsung) ----
+  printing: {
+    enabled: false,
+    main: { name: "", scale: 100, x: 0, y: 0 },    // name = nama printer di Windows (printer sharing \\\\PC\\NAMA juga bisa)
+    second: { name: "", scale: 100, x: 0, y: 0 },
+    auto: false,          // cetak otomatis tiap sesi selesai (langsung, tanpa tamu menekan apa pun)
+    autoCopies: 1,        // jumlah salinan cetak otomatis (1-3)
+    showButton: true,     // tombol ADD PRINT di layar hasil (tamu menambah cetakan)
+    price: 0,             // harga Add Print per salinan (Rp); 0 = gratis. Berbayar -> tamu scan QRIS lagi sebelum dicetak
+    both: false,          // cetak bergantian ke printer utama & kedua
+    autorotate: true,     // orientasi kertas mengikuti template
+    fit: "fill",          // fill = penuhi kertas (potong tepi) | fit = utuh dengan bingkai putih
+    limit: { enabled: false, perEvent: 5000, perSession: 3 },
+    copies: 5,            // pilihan jumlah salinan di tombol PRINT (1-9)
+    sharpening: "medium", // none | low | medium | high
+    strip2x6: false,      // template strip 2x6: cetak dobel berdampingan di kertas 4x6 (dipotong jadi dua)
   },
 
   // ---- KAMERA ----
@@ -76,7 +96,7 @@ const DEFAULTS = {
       cropLiveview: true, hideCancel: false, showThumbnails: true, thumbnailLocation: "bottom",
       sayCheeseImage: "",
     },
-    sharing: { mode: "qr", hideDone: false, iconsLocation: "right", showLabels: true },
+    sharing: { mode: "qr", hideDone: false, iconsLocation: "right", showLabels: true, offline: "auto", offlineText: "Koneksi internet sedang terputus. Foto Anda akan dikirim oleh tim kami lewat WhatsApp." }, // offline: auto = tanpa QR bila internet mati | force = selalu tanpa QR | off = tetap tampilkan QR
     // Tombol kunci (gembok) -> PIN. Muncul di SEMUA layar booth, bukan hanya layar Start.
     lock: {
       position: "top-right",   // top-left | top-right | bottom-left | bottom-right
@@ -258,6 +278,8 @@ function update(patch) {
       header: str(dis.header, 120, cg.disclaimer.header),
       text: str(dis.text, 3000, cg.disclaimer.text),
     };
+    const cs = obj(g.consent);
+    ng.consent = { enabled: bool(cs.enabled, cg.consent.enabled), title: str(cs.title, 40, cg.consent.title) || cg.consent.title, text: str(cs.text, 200, cg.consent.text) || cg.consent.text, seconds: num(cs.seconds, 5, 120, cg.consent.seconds) };
     const ex = obj(g.export);
     ng.export = {
       enabled: bool(ex.enabled, cg.export.enabled),
@@ -273,6 +295,22 @@ function update(patch) {
       const { hash, salt } = require("./auth").hashPassword(sec.pin);
       ng.security = { pinHash: hash, pinSalt: salt, pinSeeded: true, pinDefault: false };
     }
+  }
+
+  if (isObj(p.printing)) {
+    const pr = p.printing, cp = cur.printing;
+    const unit = (v, c) => { const o = obj(v); return { name: o.name === undefined ? c.name : str(o.name, 200, ""), scale: num(o.scale, 50, 150, c.scale), x: num(o.x, -100, 100, c.x), y: num(o.y, -100, 100, c.y) }; };
+    const lm = obj(pr.limit);
+    next.printing = {
+      enabled: bool(pr.enabled, cp.enabled),
+      main: unit(pr.main, cp.main), second: unit(pr.second, cp.second),
+      auto: bool(pr.auto, cp.auto), autoCopies: num(pr.autoCopies, 1, 3, cp.autoCopies), price: num(pr.price, 0, 10000000, cp.price), showButton: bool(pr.showButton, cp.showButton), both: bool(pr.both, cp.both), autorotate: bool(pr.autorotate, cp.autorotate),
+      fit: pick(pr.fit, ["fill", "fit"], cp.fit),
+      limit: { enabled: bool(lm.enabled, cp.limit.enabled), perEvent: num(lm.perEvent, 1, 1000000, cp.limit.perEvent), perSession: num(lm.perSession, 1, 99, cp.limit.perSession) },
+      copies: num(pr.copies, 1, 9, cp.copies),
+      sharpening: pick(pr.sharpening, ["none", "low", "medium", "high"], cp.sharpening),
+      strip2x6: bool(pr.strip2x6, cp.strip2x6),
+    };
   }
 
   if (isObj(p.camera)) {
@@ -337,7 +375,7 @@ function update(patch) {
       sayCheeseImage: cp.sayCheeseImage === undefined ? ccp.sayCheeseImage : upath(cp.sayCheeseImage, ccp.sayCheeseImage),
     };
     const sh = obj(d.sharing), csh = cd.sharing;
-    nd.sharing = { mode: pick(sh.mode, ["qr", "preview"], csh.mode || "qr"), hideDone: bool(sh.hideDone, csh.hideDone), iconsLocation: pick(sh.iconsLocation, ["right", "left", "bottom"], csh.iconsLocation), showLabels: bool(sh.showLabels, csh.showLabels) };
+    nd.sharing = { mode: pick(sh.mode, ["qr", "preview"], csh.mode || "qr"), hideDone: bool(sh.hideDone, csh.hideDone), iconsLocation: pick(sh.iconsLocation, ["right", "left", "bottom"], csh.iconsLocation), showLabels: bool(sh.showLabels, csh.showLabels), offline: pick(sh.offline, ["auto", "force", "off"], csh.offline || "auto"), offlineText: sh.offlineText === undefined ? csh.offlineText : str(sh.offlineText, 200, "") };
     const lk = obj(d.lock), clk = cd.lock;
     nd.lock = {
       position: pick(lk.position, ["top-left", "top-right", "bottom-left", "bottom-right"], clk.position),
@@ -526,7 +564,7 @@ function forKiosk() {
   const s = JSON.parse(JSON.stringify(load())); // salinan: pemanggil boleh memodifikasi (mis. mengubah alamat gambar) tanpa merusak data asli
   const { export: _omit, security: _sec, dataDir: _dd, ...general } = s.general;
   return {
-    event: s.event, camera: s.camera, session: s.session, display: s.display, editor: s.editor,
+    event: s.event, camera: s.camera, printing: s.printing, session: s.session, display: s.display, editor: s.editor,
     general: { ...general, pinSet: hasPin() },
     gif: s.gif, result: s.result, boomerang: s.boomerang, video: s.video, animated: s.animated,
   };

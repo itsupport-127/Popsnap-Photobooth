@@ -48,6 +48,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
       return () => ipcRenderer.removeListener("kiosk:fullscreen-changed", h);
     },
   },
+  // Cetak ke printer Windows (lokal / sharing). Lihat electron/printer.js
+  print: {
+    list: () => ipcRenderer.invoke("print:list"),
+    addShare: (unc) => ipcRenderer.invoke("print:add-share", unc),
+    image: (o) => ipcRenderer.invoke("print:image", o),
+    test: (o) => ipcRenderer.invoke("print:test", o),
+  },
   pickFolder: () => ipcRenderer.invoke("kiosk:pick-folder"),
   // Dialog "Simpan sebagai" bawaan Windows (dipakai Export template & unduh CSV)
   chooseSavePath: (opts) => ipcRenderer.invoke("files:choose-save-path", opts),

@@ -1,0 +1,54 @@
+diff --git a/backend/cameraBridge.js b/backend/cameraBridge.js
+index b681bab..f345292 100644
+--- a/backend/cameraBridge.js
++++ b/backend/cameraBridge.js
+@@ -203,6 +203,8 @@ function mount(app, { settingsStore }) {
+     res.writeHead(200, { "Content-Type": "multipart/x-mixed-replace; boundary=popsnapframe", "Cache-Control": "no-store", Connection: "keep-alive" });
+     try { res.socket?.setNoDelay(true); } catch { /* abaikan */ }
+     const startedAt = Date.now();
++    // Status "live view menyala" bisa basi (kamera sempat dimatikan layar lain / setelah Setelan Kamera): paksa kirim START
++    if (b && Date.now() - (b.lastFrameAt || 0) > 2000) b.lvOn = false;
+     let lastSent = 0;
+     const put = (buf) => {
+       const now = Date.now();
+@@ -243,7 +245,13 @@ function mount(app, { settingsStore }) {
+   app.post("/api/camera/dslr/liveview/stop", async (req, res) => {
+     lvOn = false;
+     const c0 = cfg();
+-    if (c0.driver !== "digicam") { sdkBridge.get(c0.driver, c0.model).send("LIVEVIEW_STOP"); return res.json({ ok: true }); }
++    if (c0.driver !== "digicam") {
++      // Keluar dari Setelan Kamera / layar sesi mengirim "stop" yang bisa tiba SESUDAH layar lain membuka live view -> kamera
++      // dimatikan dan layar hitam. Tunda sebentar; jalankan hanya bila tak ada aliran lain yang sedang dipakai dan tidak sedang jepret.
++      const b0 = sdkBridge.get(c0.driver, c0.model);
++      setTimeout(() => { if (clients === 0 && capturing === 0) b0.send("LIVEVIEW_STOP"); }, 1500);
++      return res.json({ ok: true });
++    }
+     await dcc("/?CMD=LiveViewWnd_Hide").catch(() => {});
+     res.json({ ok: true });
+   });
+diff --git a/backend/nativeBridge.js b/backend/nativeBridge.js
+index 05d7a1b..d59e57e 100644
+--- a/backend/nativeBridge.js
++++ b/backend/nativeBridge.js
+@@ -74,6 +74,7 @@ class NativeBridge {
+ 
+   start(model) {
+     if (this.proc) return null;
++    this.model = model;
+     const f = findDir(this.brand, model);
+     if (!f) return `${EXE_BY_BRAND[this.brand]} tidak ditemukan di sdk\\${this.brand}`;
+     if (f.needModel) return "Model kamera Nikon belum dipilih di Pengaturan > Kamera.";
+diff --git a/backend/sdkBridge.js b/backend/sdkBridge.js
+index bdbfa7d..85e3d43 100644
+--- a/backend/sdkBridge.js
++++ b/backend/sdkBridge.js
+@@ -168,6 +168,9 @@ const native = require("./nativeBridge");
+ const get = (brand, model) => {
+   const z = brand === "nikon" && /^Z/i.test(String(model || ""));
+   const key = z ? "nikon-z" : brand;
++  const cur = bridges[key];
++  // model Nikon diganti di Pengaturan: program perantara yang masih jalan memakai model lama -> matikan, nanti dijalankan ulang
++  if (cur && cur.proc && brand === "nikon" && cur.model && cur.model !== model) { try { cur.send("QUIT"); const pr = cur.proc; setTimeout(() => pr.kill(), 800); cur.proc = null; } catch { /* abaikan */ } }
+   if (!bridges[key]) bridges[key] = !z && native.EXE_BY_BRAND[brand] && native.findDir(brand, "-") ? new native.NativeBridge(brand) : new SdkBridge(brand);
+   return bridges[key];
+ };

@@ -16,6 +16,7 @@ const fs = require("fs");
 const os = require("os");
 const { spawn } = require("child_process");
 const dslrBridge = require("./dslrBridge");
+const printer = require("./printer");
 
 const isDev = !app.isPackaged;
 // Saat development: load dari Vite dev server (npm run dev di folder frontend)
@@ -286,6 +287,12 @@ ipcMain.handle("kiosk:pick-folder", async () => {
   const r = await dialog.showOpenDialog(mainWindow, { properties: ["openDirectory", "createDirectory"] });
   return r.canceled ? null : r.filePaths[0];
 });
+
+// ---------- IPC: Cetak ----------
+ipcMain.handle("print:list", async () => { try { return { ok: true, printers: await printer.list(mainWindow) }; } catch (e) { return { ok: false, error: e.message, printers: [] }; } });
+ipcMain.handle("print:add-share", async (_e, unc) => printer.addShare(String(unc || "").trim()));
+ipcMain.handle("print:image", async (_e, o) => printer.print(o || {}));
+ipcMain.handle("print:test", async (_e, o) => printer.testPage(o || {}));
 
 // ---------- IPC: Simpan sebagai (dialog Windows) ----------
 // Renderer hanya boleh menulis ke path yang BARU SAJA dipilih pengguna lewat dialog (sekali pakai) —
