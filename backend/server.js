@@ -1047,6 +1047,7 @@ function syncSocial(id) {
     } catch { /* abaikan */ }
     if (want) copyMissing(f.dir, path.join(root, want));
   }
+  gallery.pushSocial(id, f.dir).catch(() => {});
 }
 // File GIF / video / klip menyusul beberapa saat setelah sesi selesai -> sinkron ulang beberapa kali
 function scheduleSocial(id) {

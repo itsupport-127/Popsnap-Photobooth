@@ -140,7 +140,8 @@ async function syncSession(row) {
   const all = listLocal(row.session_id, row.mode, row.folder);
   const todo = all.filter((f) => !done.has(f.fid));
   if (todo.length) {
-    const body = { token: row.token, mode: row.mode, studioCode: cfg().studioCode || undefined, files: todo.map((f) => ({ fid: f.fid, kind: f.kind, idx: f.idx, ext: f.ext, size: f.size })) };
+    const social = db.prepare("SELECT social_consent FROM sessions WHERE id = ?").get(row.session_id)?.social_consent;
+    const body = { token: row.token, mode: row.mode, studioCode: cfg().studioCode || undefined, social: social ?? undefined, files: todo.map((f) => ({ fid: f.fid, kind: f.kind, idx: f.idx, ext: f.ext, size: f.size })) };
     if (failedFid.has(row.session_id) && row.attempts >= 2) body.retry = failedFid.get(row.session_id);
     const r = await api("POST", "/sessions", body);
     const byFid = new Map(todo.map((f) => [f.fid, f]));
@@ -223,11 +224,25 @@ function status() {
 
 /** Tulis popsnap-share.json di folder arsip sesi: berisi token link galeri. Dipakai halaman "Unggah manual" di website galeri
  *  (dari PC CS lewat jaringan bersama) supaya file masuk ke link yang SAMA dengan QR yang sudah dilihat pelanggan. */
-function writeShareFile(folder, token, mode) {
+function writeShareFile(folder, token, mode, social) {
   if (!ready() || !token) return;
   try {
-    fs.writeFileSync(path.join(folder, "popsnap-share.json"), JSON.stringify({ token, mode: mode || "photo", studioCode: cfg().studioCode || "", url: shareUrlFor(token), createdAt: new Date().toISOString() }, null, 2));
+    fs.writeFileSync(path.join(folder, "popsnap-share.json"), JSON.stringify({ token, mode: mode || "photo", social: Number.isInteger(social) ? social : null, studioCode: cfg().studioCode || "", url: shareUrlFor(token), createdAt: new Date().toISOString() }, null, 2));
   } catch { /* arsip tidak bisa ditulis: abaikan */ }
+}
+
+/** Kirim izin foto (sosmed / mading) ke galeri + perbarui popsnap-share.json. Aman dipanggil berulang: hanya mengirim kalau nilainya berubah. */
+const socialSent = new Map();
+async function pushSocial(sessionId, folder) {
+  const row = db.prepare("SELECT social_consent v, share_token t FROM sessions WHERE id = ?").get(sessionId);
+  if (!row) return;
+  const v = row.v ?? null;
+  if (folder) { try { const f = path.join(folder, "popsnap-share.json"); if (fs.existsSync(f)) { const j = JSON.parse(fs.readFileSync(f, "utf8")); if (j.social !== v) { j.social = v; fs.writeFileSync(f, JSON.stringify(j, null, 2)); } } } catch { /* abaikan */ } }
+  if (!ready() || !row.t || v === null || socialSent.get(sessionId) === v) return;
+  const gs = db.prepare("SELECT token FROM gallery_sync WHERE session_id = ?").get(sessionId);
+  const token = gs?.token || row.t;
+  try { await api("POST", `/sessions/${token}/social`, { social: v }); socialSent.set(sessionId, v); }
+  catch (e) { /* sesi belum terdaftar di galeri / offline: izin ikut terkirim saat sesi diunggah */ }
 }
 
 // ---------- unggah manual dari Admin (cadangan bila internet booth bermasalah) ----------
@@ -277,4 +292,4 @@ function uploadArchive(outDir, date, id, redo = false) {
 }
 
 module.exports = {
-  newShareCode, writeShareFile, listArchive, uploadArchive, enabled, ready, shareUrlFor, enqueue, run, start, testConnection, status, nudge, deleteRemote };
+  newShareCode, writeShareFile, pushSocial, listArchive, uploadArchive, enabled, ready, shareUrlFor, enqueue, run, start, testConnection, status, nudge, deleteRemote };
