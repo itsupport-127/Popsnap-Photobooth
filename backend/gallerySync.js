@@ -176,7 +176,7 @@ async function run({ force = false } = {}) {
         state.lastError = msg;
         const attempts = row.attempts + 1;
         db.prepare("UPDATE gallery_sync SET attempts = ?, last_error = ?, next_try = ? WHERE session_id = ?").run(attempts, String(msg).slice(0, 300), Date.now() + Math.min(5 * 60 * 1000, 5000 * 2 ** Math.min(attempts, 6)), row.session_id);
-        if (e.status === 401 || e.status === 503) break; // token salah / galeri belum siap: semua sesi akan gagal sama
+        if (e.status === 401 || e.status === 403 || e.status === 503) break; // token salah / studio diputus admin / galeri belum siap: semua sesi akan gagal sama // token salah / galeri belum siap: semua sesi akan gagal sama
       }
     }
     return { ok: errors === 0, sent, errors, error: errors ? state.lastError : null };
@@ -185,10 +185,19 @@ async function run({ force = false } = {}) {
 
 let nudgeTimer = null;
 function nudge() { if (!ready() || nudgeTimer) return; nudgeTimer = setTimeout(() => { nudgeTimer = null; run().catch(() => {}); }, 2500); }
+// Denyut ringan ke galeri tiap ±1 menit supaya admin bisa melihat studio ini online/offline (tanpa harus ada foto yang diunggah).
+async function heartbeat() {
+  if (!ready()) return;
+  try { await api("GET", "/ping"); state.blocked = false; }
+  catch (e) { if (e.status === 403) { state.blocked = true; state.lastError = e.message; } }
+}
 function start() {
   if (state.timer) return;
   state.timer = setInterval(() => { run().catch(() => {}); }, 8000);
   state.timer.unref?.();
+  state.hb = setInterval(() => { heartbeat().catch(() => {}); }, 60000);
+  state.hb.unref?.();
+  const first = setTimeout(() => { heartbeat().catch(() => {}); }, 5000); first.unref?.();
 }
 
 async function testConnection() {
@@ -208,7 +217,7 @@ function status() {
     activeSessions: n("SELECT COUNT(*) n FROM gallery_sync WHERE state = 'active'"),
     sessionsWithErrors: n("SELECT COUNT(*) n FROM gallery_sync WHERE state = 'active' AND last_error IS NOT NULL"),
     filesUploaded: n("SELECT COUNT(*) n FROM gallery_files"),
-    lastOkAt: state.lastOkAt, lastError: state.lastError,
+    lastOkAt: state.lastOkAt, lastError: state.lastError, blocked: !!state.blocked,
   };
 }
 
