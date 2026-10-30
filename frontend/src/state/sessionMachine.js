@@ -186,7 +186,7 @@ export function sessionReducer(session, action) {
     }
 
     // ---------- CONSENT (izin sosmed) ----------
-    case "CONSENT_DONE": return { ...session, socialConsent: action.payload?.allowed === true ? true : action.payload?.allowed === false ? false : null, state: nextAfterConsent(session.mode) };
+    case "CONSENT_DONE": return { ...session, socialConsent: Number.isInteger(action.payload?.consent) ? action.payload.consent : null, state: nextAfterConsent(session.mode) };
 
     // ---------- REMINDER ----------
     case "REMINDER_DONE": {

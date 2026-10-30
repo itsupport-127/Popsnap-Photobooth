@@ -24,7 +24,7 @@ const DEFAULTS = {
     virtualKeyboard: "builtin", // off = keyboard fisik / bawaan perangkat | builtin = keyboard layar POPSNAP | windows = keyboard sentuh Windows (dibuka otomatis di aplikasi desktop)
     security: { pinHash: "", pinSalt: "", pinSeeded: false, pinDefault: false }, // PIN keluar dari layar penuh; disimpan ter-hash
     // Izin sosmed: tamu ditanya setelah bayar (sebelum pengumuman). Jawaban menandai folder sesi (BOLEH / TIDAK) untuk content creator.
-    consent: { enabled: false, title: "IZIN FOTO", text: "Hai kak! Boleh fotonya kami bagikan di sosmed atau dipajang di mading toko? Pilih saja, boleh atau tidak sama-sama tidak masalah.", seconds: 20 },
+    consent: { enabled: false, title: "IZIN FOTO", text: "Hai kak! Fotonya boleh kami bagikan di sosmed atau dipajang di mading toko? Pilih yang kakak nyaman ya.", seconds: 20 },
     disclaimer: {
       enabled: false,
       header: "Setuju dengan ketentuan?",

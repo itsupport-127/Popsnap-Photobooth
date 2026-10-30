@@ -1002,10 +1002,14 @@ app.get("/api/settings/public", async (req, res) => {
   res.json({ storeName: store?.store_name, ...kiosk, payment: { mode: pay.mode, methods: pay.methods, online: pay.online } });
 });
 
-// ---------- IZIN SOSMED ----------
-// Tamu menjawab "boleh dipakai di sosmed?" di booth. Jawabannya menandai folder sesi (BOLEH-SOSMED.txt / TIDAK-SOSMED.txt) dan,
-// kalau boleh, semua file sesi disalin ke output/_BOLEH-SOSMED/<tanggal>_<id>/ supaya content creator tinggal membuka satu folder.
-const SOSMED_DIR = "_BOLEH-SOSMED";
+// ---------- IZIN FOTO (SOSMED / DIPAJANG DI TOKO) ----------
+// Tamu menjawab di booth: bit 1 = boleh dibagikan di sosmed, bit 2 = boleh dipajang di mading/toko (3 = keduanya, 0 = tidak, NULL = belum dijawab).
+// Jawabannya dipakai untuk menyalin semua file sesi ke output/_BOLEH-SOSMED/<tanggal>_<id>_<IZIN>/ dan/atau output/_BOLEH-MADING/...
+// (IZIN = SOSMED / MADING / SOSMED+MADING). Penandanya hanya nama folder, tanpa file .txt. Folder sesi asli tidak di-rename (path-nya dipakai database).
+const SOCIAL_BITS = [{ bit: 1, dir: "_BOLEH-SOSMED", marker: "IZIN-SOSMED.txt", note: "Tamu mengizinkan foto sesi ini dibagikan di sosmed." },
+  { bit: 2, dir: "_BOLEH-MADING", marker: "IZIN-MADING.txt", note: "Tamu mengizinkan foto sesi ini dipajang di mading / toko." }];
+const SOSMED_DIR = SOCIAL_BITS[0].dir;
+const normConsent = (v) => (Number.isInteger(v) && v >= 0 && v <= 3 ? v : null);
 function findSessionFolder(id) {
   try {
     for (const d of fs.readdirSync(outputDir()).sort().reverse()) {
@@ -1016,10 +1020,11 @@ function findSessionFolder(id) {
   } catch { /* folder keluaran belum ada */ }
   return null;
 }
+const isMarker = (n) => /^(IZIN-SOSMED|IZIN-MADING|TIDAK-ADA-IZIN)\.txt$/.test(n);
 function copyMissing(from, to) { // salin hanya file yang belum ada / beda ukuran (aman dipanggil berulang)
   fs.mkdirSync(to, { recursive: true });
   for (const e of fs.readdirSync(from, { withFileTypes: true })) {
-    if (/-SOSMED\.txt$/.test(e.name)) continue;
+    if (isMarker(e.name)) continue;
     const a = path.join(from, e.name), b = path.join(to, e.name);
     if (e.isDirectory()) copyMissing(a, b);
     else { try { if (!fs.existsSync(b) || fs.statSync(b).size !== fs.statSync(a).size) fs.copyFileSync(a, b); } catch { /* file sedang ditulis: coba lagi nanti */ } }
@@ -1029,43 +1034,47 @@ function syncSocial(id) {
   const row = db.prepare("SELECT social_consent FROM sessions WHERE id = ?").get(id);
   const f = findSessionFolder(id);
   if (!row || !f) return;
-  const copy = path.join(outputDir(), SOSMED_DIR, `${f.date}_${id}`);
-  for (const n of ["BOLEH-SOSMED.txt", "TIDAK-SOSMED.txt"]) { try { fs.rmSync(path.join(f.dir, n), { force: true }); } catch { /* abaikan */ } }
-  if (row.social_consent === 1) {
-    fs.writeFileSync(path.join(f.dir, "BOLEH-SOSMED.txt"), "Tamu mengizinkan foto sesi ini dibagikan di sosmed atau dipajang di toko.\r\n");
-    copyMissing(f.dir, copy);
-  } else {
-    if (row.social_consent === 0) fs.writeFileSync(path.join(f.dir, "TIDAK-SOSMED.txt"), "Tamu TIDAK mengizinkan foto sesi ini dibagikan di sosmed atau dipajang di toko.\r\n");
-    try { fs.rmSync(copy, { recursive: true, force: true }); } catch { /* abaikan */ }
+  const v = row.social_consent;
+  // sisa file penanda .txt dari versi lama dibersihkan; penandanya sekarang hanya nama folder
+  for (const n of fs.readdirSync(f.dir)) if (isMarker(n)) { try { fs.rmSync(path.join(f.dir, n), { force: true }); } catch { /* abaikan */ } }
+  const label = v === 3 ? "SOSMED+MADING" : v === 1 ? "SOSMED" : v === 2 ? "MADING" : "";
+  const base = `${f.date}_${id}`;
+  for (const o of SOCIAL_BITS) {
+    const root = path.join(outputDir(), o.dir);
+    const want = v !== null && (v & o.bit) ? `${base}_${label}` : null;
+    try { // hapus salinan lama (nama beda kalau izin berubah)
+      for (const d of fs.existsSync(root) ? fs.readdirSync(root) : []) if ((d === base || d.startsWith(base + "_")) && d !== want) fs.rmSync(path.join(root, d), { recursive: true, force: true });
+    } catch { /* abaikan */ }
+    if (want) copyMissing(f.dir, path.join(root, want));
   }
 }
 // File GIF / video / klip menyusul beberapa saat setelah sesi selesai -> sinkron ulang beberapa kali
 function scheduleSocial(id) {
-  for (const ms of [0, 90000, 360000]) setTimeout(() => { try { syncSocial(id); } catch (e) { console.error("[sosmed]", e.message); } }, ms);
+  for (const ms of [0, 90000, 360000]) setTimeout(() => { try { syncSocial(id); } catch (e) { console.error("[izin-foto]", e.message); } }, ms);
 }
 app.get("/api/social/list", requirePerm("settings.manage"), (req, res) => {
   const days = Math.max(1, Math.min(365, Number(req.query.days) || 30));
-  const st = String(req.query.status || "allowed");
-  const cond = st === "denied" ? "social_consent = 0" : st === "unknown" ? "social_consent IS NULL" : st === "all" ? "1=1" : "social_consent = 1";
+  const st = String(req.query.status || "sosmed");
+  const cond = { sosmed: "(social_consent & 1) = 1", mading: "(social_consent & 2) = 2", denied: "social_consent = 0", unknown: "social_consent IS NULL", all: "1=1" }[st] || "(social_consent & 1) = 1";
   const rows = db.prepare(`SELECT id, mode, final_image_path, gif_path, video_path, share_token, social_consent, created_at FROM sessions WHERE ${cond} AND created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT 500`).all(`-${days} days`);
   const items = rows.map((r) => {
     const f = findSessionFolder(r.id);
-    if (r.social_consent === 1) { try { syncSocial(r.id); } catch { /* abaikan */ } }
+    if (r.social_consent) { try { syncSocial(r.id); } catch { /* abaikan */ } }
     const main = r.final_image_path || r.gif_path || r.video_path;
-    return { id: r.id, mode: r.mode, consent: r.social_consent, createdAt: r.created_at, previewUrl: main ? publicFileUrl(main) : null, isVideo: !r.final_image_path && !r.gif_path && !!r.video_path,
-      folder: f ? f.dir : null, socialFolder: f && r.social_consent === 1 ? path.join(outputDir(), SOSMED_DIR, `${f.date}_${r.id}`) : null };
+    return { id: r.id, mode: r.mode, consent: r.social_consent, createdAt: r.created_at, previewUrl: main ? publicFileUrl(main) : null, isVideo: !r.final_image_path && !r.gif_path && !!r.video_path, folder: f ? f.dir : null };
   });
-  res.json({ items, root: path.join(outputDir(), SOSMED_DIR) });
+  res.json({ items, roots: SOCIAL_BITS.map((o) => ({ label: o.dir, path: path.join(outputDir(), o.dir) })) });
 });
 app.post("/api/social/:id", requirePerm("settings.manage"), (req, res) => {
   const id = String(req.params.id);
   if (!SAFE_ID.test(id)) return res.status(400).json({ error: "Id sesi tidak valid." });
   if (!db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(id)) return res.status(404).json({ error: "Sesi tidak ditemukan." });
-  const a = req.body?.allowed;
-  const v = a === true ? 1 : a === false ? 0 : null;
+  const b = req.body ?? {};
+  const v = b.consent === null ? null : normConsent(b.consent);
+  if (b.consent !== null && v === null) return res.status(400).json({ error: "Nilai izin harus 0-3." });
   db.prepare("UPDATE sessions SET social_consent = ? WHERE id = ?").run(v, id);
-  try { syncSocial(id); } catch (e) { console.error("[sosmed]", e.message); }
-  logActivity(req.user, "social.consent", id, { izin: v === 1 ? "boleh" : v === 0 ? "tidak" : "belum" }, req);
+  try { syncSocial(id); } catch (e) { console.error("[izin-foto]", e.message); }
+  logActivity(req.user, "social.consent", id, { izin: v === null ? "belum" : v === 0 ? "tidak" : v === 3 ? "sosmed + mading" : v === 1 ? "sosmed saja" : "mading saja" }, req);
   res.json({ ok: true, consent: v });
 });
 
@@ -1460,7 +1469,7 @@ app.post("/api/session/finish", async (req, res) => {
   // ?? null WAJIB ada — node:sqlite melempar error kalau parameter `undefined`.
   sessionKeys.set(id, { key, until: Date.now() + 60 * 60 * 1000 });
   cloud.attachSession({ sessionId: id, ref: SAFE_ID.test(String(sessionId ?? "")) ? String(sessionId) : null, templateId, mode: "photo", paymentMethod });
-  if (typeof socialConsent === "boolean") db.prepare("UPDATE sessions SET social_consent = ? WHERE id = ?").run(socialConsent ? 1 : 0, id);
+  if (normConsent(socialConsent) !== null) db.prepare("UPDATE sessions SET social_consent = ? WHERE id = ?").run(socialConsent, id);
   const realToken = db.prepare("SELECT share_token FROM sessions WHERE id = ?").get(id)?.share_token || shareToken; // sesi diulang: pakai token yang sudah tersimpan
   gallery.enqueue(id, realToken, "photo");
 
@@ -1493,7 +1502,7 @@ app.post("/api/session/finish", async (req, res) => {
     console.error("[output] Gagal simpan arsip lokal:", err.message);
   }
 
-  if (typeof socialConsent === "boolean") scheduleSocial(id);
+  if (normConsent(socialConsent) !== null) scheduleSocial(id);
   const offline = await boothOffline();
   res.json({ offline, sessionId: id, uploadKey: key, downloadUrl: publicFileUrl(finalImagePath), shareUrl: gallery.shareUrlFor(realToken) || (realToken ? publicFileUrl(`/s/${realToken}`) : null), expiresAt });
 });
@@ -1552,7 +1561,7 @@ app.post("/api/session/media", express.raw({ type: () => true, limit: "300mb" })
     if (mediaShareToken) gallery.enqueue(id, mediaShareToken, kind);
     const ref = SAFE_ID.test(String(req.query.orderNo ?? "")) ? String(req.query.orderNo) : null;
     cloud.attachSession({ sessionId: id, ref, mode: kind, paymentMethod: req.query.paymentMethod ? String(req.query.paymentMethod) : null });
-    if (req.query.social === "1" || req.query.social === "0") { db.prepare("UPDATE sessions SET social_consent = ? WHERE id = ?").run(req.query.social === "1" ? 1 : 0, id); scheduleSocial(id); }
+    { const sc = normConsent(Number(req.query.social)); if (req.query.social !== undefined && sc !== null) { db.prepare("UPDATE sessions SET social_consent = ? WHERE id = ?").run(sc, id); scheduleSocial(id); } }
   }
 
   try {

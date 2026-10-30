@@ -75,7 +75,7 @@ export default function SettingsGeneral({ s, set, pin, setPin, outputDir }) {
       </Card>
 
       <Card title="IZIN FOTO (SOSMED & DIPAJANG DI TOKO)" hint="Layar tambahan setelah pembayaran dan sebelum pengumuman. Hasilnya bisa dilihat di menu Sosmed.">
-        <Row label="Izin foto" hint="Setelah bayar (sebelum pengumuman), tamu ditanya boleh atau tidak fotonya dibagikan di sosmed atau dipajang di toko. Folder sesi ditandai dan yang BOLEH disalin ke folder _BOLEH-SOSMED. Tidak dijawab = tidak boleh."><Check checked={g.consent.enabled} onChange={(v) => set(["general", "consent", "enabled"], v)} label="Tanya izin foto ke tamu" /></Row>
+        <Row label="Izin foto" hint="Setelah bayar (sebelum pengumuman), tamu memilih: Keduanya / Sosmed saja / Mading saja / Tidak. Folder sesi ditandai, dan yang diizinkan disalin ke folder _BOLEH-SOSMED dan/atau _BOLEH-MADING. Tidak dijawab = Tidak."><Check checked={g.consent.enabled} onChange={(v) => set(["general", "consent", "enabled"], v)} label="Tanya izin foto ke tamu" /></Row>
         {g.consent.enabled && (<>
           <Row label="Judul"><input className={inputCls} maxLength={40} value={g.consent.title} onChange={(e) => set(["general", "consent", "title"], e.target.value)} /></Row>
           <Row label="Pertanyaan"><input className={inputCls} maxLength={200} value={g.consent.text} onChange={(e) => set(["general", "consent", "text"], e.target.value)} /></Row>

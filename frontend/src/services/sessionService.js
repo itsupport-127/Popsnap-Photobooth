@@ -32,7 +32,7 @@ export async function uploadSession(session) {
       templateId: session.selectedTemplate?.id,
       paymentMethod: session.paymentMethod,
       finalImage: session.finalImage,
-      socialConsent: typeof session.socialConsent === "boolean" ? session.socialConsent : undefined, // izin dipakai di sosmed (layar Izin Sosmed)
+      socialConsent: Number.isInteger(session.socialConsent) ? session.socialConsent : undefined, // izin foto (layar Izin Foto): 1 sosmed, 2 mading, 3 keduanya, 0 tidak
       shots,
     }),
   });
@@ -49,7 +49,7 @@ export async function uploadMedia(blob, kind, { sessionId, uploadKey, paymentMet
   const qs = new URLSearchParams({ kind });
   if (sessionId) { qs.set("sessionId", sessionId); qs.set("key", uploadKey ?? ""); }
   if (paymentMethod) qs.set("paymentMethod", paymentMethod);
-  if (typeof social === "boolean") qs.set("social", social ? "1" : "0");
+  if (Number.isInteger(social)) qs.set("social", String(social));
   if (orderNo) qs.set("orderNo", orderNo); // nomor transaksi (QRIS/voucher) supaya sesi ini terhubung ke riwayat kasir
   const res = await fetch(`${API_BASE}/api/session/media?${qs}`, {
     method: "POST",
