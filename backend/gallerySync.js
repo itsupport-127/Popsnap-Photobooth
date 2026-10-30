@@ -189,8 +189,15 @@ function nudge() { if (!ready() || nudgeTimer) return; nudgeTimer = setTimeout((
 // Denyut ringan ke galeri tiap ±1 menit supaya admin bisa melihat studio ini online/offline (tanpa harus ada foto yang diunggah).
 async function heartbeat() {
   if (!ready()) return;
-  try { await api("GET", "/ping"); state.blocked = false; }
-  catch (e) { if (e.status === 403) { state.blocked = true; state.lastError = e.message; } }
+  const st = status();
+  let kasir = null;
+  try { const cs = require("./cloudSync").status(); const err = cs.lastError || cs.changesError || null; kasir = { ok: !err, error: err || "" }; } catch { /* kasir online tidak dipakai */ }
+  const rep = { pendingSessions: st.activeSessions, sessionsWithErrors: st.sessionsWithErrors, lastError: st.lastError || "", lastOkAt: st.lastOkAt || null, filesUploaded: st.filesUploaded, kasir, app: "photobox" };
+  try { await api("POST", "/heartbeat", rep); state.blocked = false; }
+  catch (e) {
+    if (e.status === 403) { state.blocked = true; state.lastError = e.message; }
+    else if (e.status === 404) { try { await api("GET", "/ping"); } catch { /* galeri lama: cukup denyut sederhana */ } } // galeri versi lama belum punya /heartbeat
+  }
 }
 function start() {
   if (state.timer) return;
