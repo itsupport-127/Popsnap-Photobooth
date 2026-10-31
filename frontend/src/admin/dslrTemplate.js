@@ -14,7 +14,7 @@
 // (ImagePath kosong, PhotoNumber, Rotation). ZIndex naik = makin ke depan (terbukti: gambar bingkai ber-ZIndex tertinggi).
 // Juga diverifikasi dari contoh asli: <Text Text FontName FontColor IsBold IsItalic Width Height Top Left Rotation> (tanpa FontSize:
 // ukuran huruf mengikuti tinggi kotak, diukur dari preview.png = ~0,88 x Height, rata tengah) dan bentuk <Rectangle> <Ellipse> <Line> <Star>
-// (BackgroundColor = isi, Color = garis, Thickness = tebal garis; Line = batang setebal Thickness di Top). Star tidak ada di POPSNAP.
+// (BackgroundColor = isi, Color = garis, Thickness = tebal garis; Line = batang setebal Thickness di Top; Star = bentuk bintang).
 // Seluruh layer POPSNAP juga disimpan utuh di popsnap.json di dalam ZIP yang sama, sehingga POPSNAP -> POPSNAP tidak kehilangan apa pun.
 // ==========================================================
 import { PAPERS, DPIS } from "./editorKit";
@@ -53,7 +53,7 @@ export function buildTemplateXml({ meta, favorite, entries }) {
         `IsBold="${bool(l.bold)}" IsItalic="${bool(l.italic)}" ZIndex="${z}" Rotation="${int(l.rotation)}" />`
       );
     } else if (l.type === "shape") {
-      const tag = l.shapeKind === "circle" ? "Ellipse" : "Rectangle";
+      const tag = l.shapeKind === "circle" ? "Ellipse" : l.shapeKind === "star" ? "Star" : "Rectangle";
       const fill = l.fillColor === "transparent" ? "#00FFFFFF" : argb(l.fillColor || "#FF3E8E");
       lines.push(
         `    <${tag} Name="${esc(l.name || tag)}" ${look}Width="${int((l.widthPct / 100) * W)}" Height="${int((l.heightPct / 100) * H)}" BackgroundColor="${fill}" Color="${argb(l.strokeColor)}" Thickness="${int(l.strokeWidth)}" KeepAspect="False" ZIndex="${z}" Left="${int((l.xPct / 100) * W)}" Top="${int((l.yPct / 100) * H)}" />`
@@ -208,20 +208,18 @@ export async function importDslrTemplate(files) {
         color: hexFromArgb(a.fontcolor, "#000000"), fontFamily: a.fontname || "sans-serif",
         bold: isTrue(a.isbold), italic: isTrue(a.isitalic), align: "center",
       });
-    } else if (["rectangle", "ellipse", "line"].includes(lt)) {
+    } else if (["rectangle", "ellipse", "line", "star"].includes(lt)) {
       const fillRaw = String(a.backgroundcolor ?? "");
       const clear = /^#?00/i.test(fillRaw) && fillRaw.replace("#", "").length === 8;
       const thick = num(a.thickness, 0);
       const shape = {
-        ...base, type: "shape", shapeKind: lt === "ellipse" ? "circle" : "rectangle",
+        ...base, type: "shape", shapeKind: lt === "ellipse" ? "circle" : lt === "star" ? "star" : "rectangle",
         fillColor: clear ? "transparent" : hexFromArgb(fillRaw, "#FFFFFF"), strokeColor: hexFromArgb(a.color, "#000000"), strokeWidth: thick,
       };
       if (lt === "line") { // garis = batang selebar kotak, setebal Thickness, di Top (cocok dengan preview dslrBooth)
         shape.heightPct = (Math.max(1, thick) / H) * 100; shape.fillColor = hexFromArgb(a.color, "#000000"); shape.strokeWidth = 0;
       }
       layers.push(shape);
-    } else if (lt === "star") {
-      report.push({ level: "warn", text: `Bentuk bintang "${name}" belum ada di POPSNAP dan dilewati.` });
     } else {
       report.push({ level: "warn", text: `Layer "${name}" bertipe <${tag}> belum didukung dan dilewati.` });
     }

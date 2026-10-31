@@ -1,5 +1,6 @@
 import { slotColor } from "../utils/slotColors";
 import FilteredImg from "./FilteredImg";
+import { STAR_POINTS } from "../utils/composeImage";
 import React from "react";
 
 // ==========================================================
@@ -125,6 +126,16 @@ export function LayerContent({ layer, canvasWidth, canvasHeight, photoUrl, filte
         </div>
         {stroke}
       </>
+    );
+  }
+
+  if (layer.type === "shape" && layer.shapeKind === "star") {
+    const pts = STAR_POINTS.map(([px, py]) => `${(px * 100).toFixed(2)},${(py * 100).toFixed(2)}`).join(" ");
+    return (
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%", display: "block", overflow: "visible" }}>
+        <polygon points={pts} fill={layer.fillColor === "transparent" ? "none" : layer.fillColor} stroke={layer.strokeWidth > 0 ? layer.strokeColor : "none"}
+          strokeWidth={layer.strokeWidth > 0 ? `${(layer.strokeWidth / canvasWidth) * 100}cqw` : 0} vectorEffect="non-scaling-stroke" strokeLinejoin="miter" />
+      </svg>
     );
   }
 

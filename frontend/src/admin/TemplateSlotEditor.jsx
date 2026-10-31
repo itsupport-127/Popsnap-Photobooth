@@ -101,6 +101,7 @@ export default function TemplateSlotEditor({ currentUser, onLogout }) {
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const showToast = (text) => { setToast(text); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 7000); };
+  const [importAsk, setImportAsk] = useState(null); // hasil baca file impor, menunggu nama / kategori / harga
   const [importReport, setImportReport] = useState(null); // { title, intro, items: [{level, text}] }
 
   // ---------- Muat daftar template ----------
@@ -643,13 +644,25 @@ export default function TemplateSlotEditor({ currentUser, onLogout }) {
     if (file) importFromFile(file);
   }
 
+  // Tahap 1: baca file. Tahap 2 (dialog): isi nama / kategori / harga, karena file dslrBooth tidak membawa harga & kategori.
   async function importFromFile(file) {
     if (blockedNoSlot()) return;
     if (dirty && !confirm("Ada perubahan yang belum disimpan. Tetap impor? (Template yang sedang dibuka akan ditutup.)")) return;
     setBusyMsg("Membaca file...");
     try {
-      const { meta: m, layers: imported, favorite: fav, report } = await parseImportFile(file);
-      setBusyMsg("Membuat template baru...");
+      const parsed = await parseImportFile(file);
+      setImportAsk(parsed);
+    } catch (err) {
+      alert(err.message || "Gagal membaca file template.");
+    } finally { setBusyMsg(null); }
+  }
+
+  async function finishImport(parsed, { name, category, price }) {
+    setImportAsk(null);
+    setBusyMsg("Membuat template baru...");
+    try {
+      const { meta: m0, layers: imported, favorite: fav, report } = parsed;
+      const m = { ...m0, name: name || m0.name, category: category || m0.category, price };
       const tpl = await createTemplate({ ...m, imported: true });
       const finalLayers = [];
       let n = 0;
@@ -987,6 +1000,7 @@ export default function TemplateSlotEditor({ currentUser, onLogout }) {
           <div className="flex justify-end mt-4"><button onClick={() => setImportReport(null)} className="px-4 py-2 bg-[#E02843] hover:bg-[#B81E36] text-white">OK</button></div>
         </Modal>
       )}
+      {importAsk && <ImportAskModal parsed={importAsk} categories={categories} onManageCategories={() => setCatManager(true)} onClose={() => setImportAsk(null)} onConfirm={(v) => finishImport(importAsk, v)} />}
       {modal === "new" && <NewTemplateModal categories={categories} onManageCategories={() => setCatManager(true)} onClose={() => setModal(null)} onCreate={handleCreate} />}
       {catManager && <CategoryManager onClose={() => { setCatManager(false); reloadCategories(); }} onChanged={reloadCategories} />}
     </div>
@@ -1155,7 +1169,7 @@ function LayerOptions({ layer, layers, onChange, onReplaceImage }) {
       {layer.type === "photo-slot" && (
         <Field label="Bentuk slot">
           <select value={layer.shapeKind} onChange={(e) => onChange({ shapeKind: e.target.value })} className={inputCls}>
-            {SHAPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            {SHAPES.filter((s) => s.id !== "star").map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </Field>
       )}
@@ -1233,6 +1247,30 @@ function NewTemplateModal({ categories, onManageCategories, onClose, onCreate })
           <button onClick={onClose} className="px-4 py-2 bg-[#E8EEF4] hover:bg-[#DCE5EE]">Batal</button>
           <button onClick={submit} disabled={busy} className="px-4 py-2 bg-[#E02843] hover:bg-[#B81E36] text-white disabled:opacity-50">{busy ? "Membuat..." : "Buat Template"}</button>
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Dialog setelah memilih file impor: nama, kategori, harga (file dslrBooth tidak menyimpan harga/kategori). */
+function ImportAskModal({ parsed, categories, onManageCategories, onClose, onConfirm }) {
+  const { meta, layers } = parsed;
+  const [name, setName] = useState(meta.name || "");
+  const [category, setCategory] = useState(meta.category || categories[0]?.id);
+  const [price, setPrice] = useState(String(meta.price || 25000));
+  useEffect(() => { if (!categories.some((c) => c.id === category) && categories[0]) setCategory(categories[0].id); }, [categories]); // eslint-disable-line react-hooks/exhaustive-deps
+  const photos = new Set(layers.filter((l) => l.type === "photo-slot").map((l) => l.photoOrder)).size;
+  return (
+    <Modal title="Impor template" onClose={onClose} width="w-[480px]">
+      <p className="text-[13px] text-[#262A38] mb-3">{meta.canvasWidth}×{meta.canvasHeight} px · {layers.length} layer · {photos} foto. File dari dslrBooth tidak membawa harga dan kategori, jadi isi di sini.</p>
+      <div className="flex flex-col gap-3">
+        <Field label="Nama template"><input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} /></Field>
+        <Field label="Kategori"><CategorySelect value={category} categories={categories} onManage={onManageCategories} onChange={setCategory} /></Field>
+        <Field label="Harga (Rp)"><input type="number" min={0} step={1000} value={price} onChange={(e) => setPrice(e.target.value)} className={inputCls} /></Field>
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <button onClick={onClose} className="px-4 py-2 border border-[#C7D0DA] text-[13px]">Batal</button>
+        <button onClick={() => onConfirm({ name: name.trim(), category, price: Math.max(0, Math.round(Number(price) || 0)) })} className="px-4 py-2 bg-[#E02843] hover:bg-[#B81E36] text-white text-[13px]">Impor</button>
       </div>
     </Modal>
   );

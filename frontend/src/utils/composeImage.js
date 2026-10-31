@@ -251,10 +251,25 @@ function strokeInside(ctx, shapeKind, w, h, sw, color, shadow) {
 /**
  * Bangun path shape (dipakai untuk clip foto ATAU fill/stroke shape dekorasi).
  */
+/** Titik bintang 5 sudut (0..1 dalam kotak): jari-jari luar 0,5 dan dalam 0,5 x 0,382, lalu diregangkan memenuhi kotak. */
+export const STAR_POINTS = (() => {
+  const pts = [];
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 === 0 ? 1 : 0.382;
+    pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  return pts.map(([px, py]) => [(px - x0) / (x1 - x0), (py - y0) / (y1 - y0)]);
+})();
+
 function buildShapePath(ctx, shapeKind, x, y, w, h, radiusOverride) {
   ctx.beginPath();
   if (shapeKind === "circle") {
     ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  } else if (shapeKind === "star") {
+    // Bintang 5 sudut yang memenuhi kotak (sama dengan preview CSS: starPoints)
+    STAR_POINTS.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(x + px * w, y + py * h) : ctx.lineTo(x + px * w, y + py * h)));
   } else if (shapeKind === "rounded") {
     const radius = radiusOverride ?? Math.min(w, h) * 0.15;
     roundedRectPath(ctx, x, y, w, h, radius);

@@ -19,6 +19,7 @@ export const SHAPES = [
   { id: "rectangle", label: "Kotak" },
   { id: "rounded", label: "Rounded" },
   { id: "circle", label: "Lingkaran" },
+  { id: "star", label: "Bintang" }, // hanya untuk layer Shape (slot foto tidak memakainya)
 ];
 
 export function paperPx(paperId, orientation, dpi) {

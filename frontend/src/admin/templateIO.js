@@ -15,7 +15,8 @@ import { buildTemplateXml, importDslrTemplate, sniffImage } from "./dslrTemplate
 
 const FORMAT = "popsnap-template";
 const MAX_FILE_CHARS = 80 * 1024 * 1024; // ~60 MB data asli
-const SHAPES = ["rectangle", "rounded", "circle"];
+const SHAPES = ["rectangle", "rounded", "circle"]; // bentuk slot foto
+const SHAPE_KINDS = [...SHAPES, "star"]; // bentuk layer Shape
 
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
@@ -185,7 +186,7 @@ function sanitizeImported(data) {
     } else if (l.type === "photo-slot") {
       layers.push({ ...base, type: "photo-slot", photoOrder: Math.round(num(l.photoOrder, 1, 99, 1)), shapeKind: SHAPES.includes(l.shapeKind) ? l.shapeKind : "rectangle" });
     } else if (l.type === "shape") {
-      layers.push({ ...base, type: "shape", shapeKind: SHAPES.includes(l.shapeKind) ? l.shapeKind : "rectangle", fillColor: color(l.fillColor, "#ff3e8e") });
+      layers.push({ ...base, type: "shape", shapeKind: SHAPE_KINDS.includes(l.shapeKind) ? l.shapeKind : "rectangle", fillColor: color(l.fillColor, "#ff3e8e") });
     } else if (l.type === "text") {
       layers.push({
         ...base, type: "text", text: text(l.text, 200), fontSize: Math.round(num(l.fontSize, 4, 2000, 48)), color: color(l.color, "#000000"),
