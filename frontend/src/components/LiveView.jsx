@@ -20,6 +20,11 @@ export default function LiveView({ camera, aspect, crop = true, fill = false, on
   const gain = camera.liveGain || 1;
   const useGamma = Math.abs(gain - 1) > 0.02;
   const exp = (1 / Math.max(0.1, gain)).toFixed(3);
+  // Profil warna (kontras / saturasi / hangat-dingin): operasi linear di layar, tidak memperbesar noise seperti gamma
+  const ct = (lv.contrast ?? 100) / 100, sat = (lv.saturation ?? 100) / 100, wm = (lv.warmth ?? 0) / 100;
+  const useColor = Math.abs(ct - 1) > 0.01 || Math.abs(sat - 1) > 0.01 || Math.abs(wm) > 0.005;
+  const useFilter = useGamma || useColor;
+  const cInt = ((1 - ct) / 2).toFixed(4), rS = (ct * (1 + wm)).toFixed(4), bS = (ct * (1 - wm)).toFixed(4), gS = ct.toFixed(4);
   const rot = effectiveRotation(lv.rotation || 0, cfg.orientation, dims.w, dims.h);
   const sideways = rot === 90 || rot === 270;
   // Kotak ber-container-type:size supaya anak bisa memakai cqw/cqh untuk tukar lebar-tinggi saat dirotasi 90/270
@@ -38,7 +43,7 @@ export default function LiveView({ camera, aspect, crop = true, fill = false, on
     width: sideways ? "100cqh" : "100cqw", height: sideways ? "100cqw" : "100cqh",
     transform: `translate(-50%, -50%) rotate(${rot}deg) scaleX(${(mirror ?? lv.mirror) ? -1 : 1})`,
     maxWidth: "none", maxHeight: "none", // Tailwind membatasi video/img ke 100%; saat dirotasi 90° lebar elemen = tinggi kotak, jadi batas itu harus dicabut
-    objectFit: crop ? "cover" : "contain", opacity: lv.enabled ? 1 : 0, filter: useGamma ? `url(#${gid})` : undefined, willChange: lv.asIs === true ? undefined : "transform", imageRendering: "auto", // (mode "apa adanya": tanpa will-change supaya browser memperkecil gambar dengan kualitas tinggi, bukan bilinear cepat yang bergerigi/pecah) layer sendiri: frame baru tidak memaksa lukis ulang elemen lain
+    objectFit: crop ? "cover" : "contain", opacity: lv.enabled ? 1 : 0, filter: useFilter ? `url(#${gid})` : undefined, willChange: lv.asIs === true ? undefined : "transform", imageRendering: "auto", // (mode "apa adanya": tanpa will-change supaya browser memperkecil gambar dengan kualitas tinggi, bukan bilinear cepat yang bergerigi/pecah) layer sendiri: frame baru tidak memaksa lukis ulang elemen lain
   };
   // Area potong: persegi panjang berrasio `guide`, di tengah gambar kamera yang tampil utuh (sama dengan pemotongan saat foto dimasukkan ke slot)
   const A = dims.w && dims.h ? (sideways ? dims.h / dims.w : dims.w / dims.h) : 0;
@@ -46,14 +51,24 @@ export default function LiveView({ camera, aspect, crop = true, fill = false, on
   const vwc = `min(100cqw, calc(100cqh * ${A}))`; // lebar gambar kamera yang tampil
   return (
     <div className={`relative overflow-hidden bg-black max-h-full max-w-full ${className}`} style={boxStyle}>
-      {useGamma && (
+      {useFilter && (
         <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
           <filter id={gid} colorInterpolationFilters="sRGB" x="0" y="0" width="100%" height="100%">
-            <feComponentTransfer>
-              <feFuncR type="gamma" amplitude="1" exponent={exp} offset="0" />
-              <feFuncG type="gamma" amplitude="1" exponent={exp} offset="0" />
-              <feFuncB type="gamma" amplitude="1" exponent={exp} offset="0" />
-            </feComponentTransfer>
+            {useGamma && (
+              <feComponentTransfer>
+                <feFuncR type="gamma" amplitude="1" exponent={exp} offset="0" />
+                <feFuncG type="gamma" amplitude="1" exponent={exp} offset="0" />
+                <feFuncB type="gamma" amplitude="1" exponent={exp} offset="0" />
+              </feComponentTransfer>
+            )}
+            {useColor && <feColorMatrix type="saturate" values={String(sat)} />}
+            {useColor && (
+              <feComponentTransfer>
+                <feFuncR type="linear" slope={rS} intercept={cInt} />
+                <feFuncG type="linear" slope={gS} intercept={cInt} />
+                <feFuncB type="linear" slope={bS} intercept={cInt} />
+              </feComponentTransfer>
+            )}
           </filter>
         </svg>
       )}

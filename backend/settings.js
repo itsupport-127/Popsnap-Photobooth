@@ -62,7 +62,7 @@ const DEFAULTS = {
     audioDeviceId: "",
     dslr: { host: "http://localhost:5513", camera: "", driver: "digicam", model: "", zModel: "" }, // DSLR via digiCamControl (web server lokal)
     orientation: "auto", // auto = ikut gambar kamera | landscape | portrait (kamera dipasang tegak: gambar otomatis diputar 90°)
-    liveView: { enabled: true, mirror: true, rotation: 0, displayOnStart: false, guide: true, fitTemplate: false, frameMode: "camera", brightness: 100, autoBright: true, canonAutoExposure: false, canonBoost: 3, asIs: false },
+    liveView: { enabled: true, mirror: true, rotation: 0, displayOnStart: false, guide: true, fitTemplate: false, frameMode: "camera", brightness: 100, autoBright: true, canonAutoExposure: false, canonBoost: 3, asIs: false, contrast: 100, saturation: 100, warmth: 0 },
   },
 
   // ---- EDITOR: filter foto yang bisa ditambah admin (No Filter selalu ada di urutan pertama) ----
@@ -339,6 +339,10 @@ function update(patch) {
         canonAutoExposure: bool(lv.canonAutoExposure, cc.liveView.canonAutoExposure),
         canonBoost: num(lv.canonBoost, 0, 6, cc.liveView.canonBoost),
         asIs: bool(lv.asIs, cc.liveView.asIs),
+        // Profil warna live view (tampilan saja; linear, tidak menguatkan noise): 100 = apa adanya, warmth -30 (dingin) .. +30 (hangat)
+        contrast: num(lv.contrast, 50, 160, cc.liveView.contrast ?? 100),
+        saturation: num(lv.saturation, 0, 200, cc.liveView.saturation ?? 100),
+        warmth: num(lv.warmth, -30, 30, cc.liveView.warmth ?? 0),
       },
     };
   }
