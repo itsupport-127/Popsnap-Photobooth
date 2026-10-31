@@ -10,10 +10,12 @@
 //           <Image Name Opacity(0-100) ShadowEnabled ShadowColor ShadowDepth ShadowRadius ShadowDirection
 //                  Width Height Top Left (piksel kanvas) ImagePath KeepAspect Thickness StrokeColor ZIndex />
 //
-// DIVERIFIKASI dari contoh file asli: atribut template + elemen <Image>.
-// BELUM ada contoh untuk Photo / Text / Shape / rotasi, jadi impornya memakai tebakan (ditandai di laporan impor),
-// dan ekspor TIDAK menulis elemen itu ke template.xml (supaya dslrBooth tidak salah baca). Seluruh layer POPSNAP
-// disimpan utuh di popsnap.json di dalam ZIP yang sama, sehingga POPSNAP -> POPSNAP tidak kehilangan apa pun.
+// DIVERIFIKASI dari contoh file asli: atribut template + elemen <Image> (+ Rotation, IsLocked) + elemen <Photo>
+// (ImagePath kosong, PhotoNumber, Rotation). ZIndex naik = makin ke depan (terbukti: gambar bingkai ber-ZIndex tertinggi).
+// Juga diverifikasi dari contoh asli: <Text Text FontName FontColor IsBold IsItalic Width Height Top Left Rotation> (tanpa FontSize:
+// ukuran huruf mengikuti tinggi kotak, diukur dari preview.png = ~0,88 x Height, rata tengah) dan bentuk <Rectangle> <Ellipse> <Line> <Star>
+// (BackgroundColor = isi, Color = garis, Thickness = tebal garis; Line = batang setebal Thickness di Top). Star tidak ada di POPSNAP.
+// Seluruh layer POPSNAP juga disimpan utuh di popsnap.json di dalam ZIP yang sama, sehingga POPSNAP -> POPSNAP tidak kehilangan apa pun.
 // ==========================================================
 import { PAPERS, DPIS } from "./editorKit";
 
@@ -21,13 +23,15 @@ const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").
 const bool = (b) => (b ? "True" : "False");
 const argb = (hex, alpha = "FF") => `#${alpha}${String(hex || "#000000").replace("#", "").toUpperCase()}`;
 const int = (n) => String(Math.round(Number(n) || 0));
+// dslrBooth memakai nama font Windows; nama generik POPSNAP dipetakan ke font yang pasti ada
+const dslrFont = (f) => ({ "sans-serif": "Arial", serif: "Times New Roman", monospace: "Courier New", cursive: "Comic Sans MS" }[f] || f || "Arial");
 const pad = (n) => String(n).padStart(2, "0");
 
 export function formatDslrDate(d = new Date()) {
   return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-/** @param entries [{ layer, fileName }] hanya layer gambar, urut belakang -> depan */
+/** @param entries [{ layer, fileName }] layer gambar (fileName) dan slot foto (fileName null), urut belakang -> depan */
 export function buildTemplateXml({ meta, favorite, entries }) {
   const W = meta.canvasWidth, H = meta.canvasHeight;
   const lines = [
@@ -37,12 +41,35 @@ export function buildTemplateXml({ meta, favorite, entries }) {
   ];
   entries.forEach(({ layer: l, fileName }, z) => {
     const sh = l.shadow || {};
-    lines.push(
-      `    <Image Name="${esc(l.name || fileName)}" Opacity="${int((l.opacity ?? 1) * 100)}" ShadowEnabled="${bool(sh.enabled)}" ShadowColor="${argb(sh.color)}" ` +
-      `ShadowDepth="${int(sh.distance ?? 10)}" ShadowRadius="${int(sh.spread ?? 20)}" ShadowDirection="${int(sh.angle ?? -45)}" ` +
-      `Width="${int((l.widthPct / 100) * W)}" Height="${int((l.heightPct / 100) * H)}" Top="${int((l.yPct / 100) * H)}" Left="${int((l.xPct / 100) * W)}" ` +
-      `ImagePath="${esc(fileName)}" KeepAspect="${bool(l.lockAspect)}" Thickness="${int(l.strokeWidth)}" StrokeColor="${argb(l.strokeColor)}" ZIndex="${z}" />`
-    );
+    const isPhoto = l.type === "photo-slot";
+    const look =
+      `Opacity="${int((l.opacity ?? 1) * 100)}" ShadowEnabled="${bool(sh.enabled)}" ShadowColor="${argb(sh.color)}" ` +
+      `ShadowDepth="${int(sh.distance ?? 10)}" ShadowRadius="${int(sh.spread ?? 20)}" ShadowDirection="${int(sh.angle ?? -45)}" `;
+    const box = `Width="${int((l.widthPct / 100) * W)}" Height="${int((l.heightPct / 100) * H)}" Top="${int((l.yPct / 100) * H)}" Left="${int((l.xPct / 100) * W)}" `;
+    const common = look + box;
+    if (l.type === "text") {
+      lines.push(
+        `    <Text Name="${esc(l.name || "Text")}" ${look}Text="${esc(l.text)}" FontName="${esc(dslrFont(l.fontFamily))}" ${box}FontColor="${argb(l.color)}" KeepAspect="True" ` +
+        `IsBold="${bool(l.bold)}" IsItalic="${bool(l.italic)}" ZIndex="${z}" Rotation="${int(l.rotation)}" />`
+      );
+    } else if (l.type === "shape") {
+      const tag = l.shapeKind === "circle" ? "Ellipse" : "Rectangle";
+      const fill = l.fillColor === "transparent" ? "#00FFFFFF" : argb(l.fillColor || "#FF3E8E");
+      lines.push(
+        `    <${tag} Name="${esc(l.name || tag)}" ${look}Width="${int((l.widthPct / 100) * W)}" Height="${int((l.heightPct / 100) * H)}" BackgroundColor="${fill}" Color="${argb(l.strokeColor)}" Thickness="${int(l.strokeWidth)}" KeepAspect="False" ZIndex="${z}" Left="${int((l.xPct / 100) * W)}" Top="${int((l.yPct / 100) * H)}" />`
+      );
+    } else if (isPhoto) {
+      // Format <Photo> diverifikasi dari ekspor dslrBooth asli: ImagePath kosong, PhotoNumber = nomor foto (boleh sama di beberapa slot)
+      lines.push(
+        `    <Photo Name="${esc(l.name || `Photo ${l.photoOrder ?? 1}`)}" ${common}ImagePath="" KeepAspect="False" Thickness="${int(l.strokeWidth)}" StrokeColor="${argb(l.strokeColor)}" ` +
+        `PhotoNumber="${int(l.photoOrder ?? 1)}" ZIndex="${z}" Rotation="${int(l.rotation)}" />`
+      );
+    } else {
+      lines.push(
+        `    <Image Name="${esc(l.name || fileName)}" ${common}ImagePath="${esc(fileName)}" KeepAspect="${bool(l.lockAspect)}" Thickness="${int(l.strokeWidth)}" StrokeColor="${argb(l.strokeColor)}" ` +
+        `ZIndex="${z}" Rotation="${int(l.rotation)}" IsLocked="${bool(l.locked)}" />`
+      );
+    }
   });
   lines.push("  </Elements>", "</Template>");
   return "\uFEFF" + lines.join("\r\n"); // BOM + CRLF, persis seperti file asli dslrBooth
@@ -174,18 +201,27 @@ export async function importDslrTemplate(files) {
       if (!hasNum) report.push({ level: "warn", text: `Slot foto "${name}": nomor foto tidak terbaca dari XML, dipakai urutan ${seq}. Periksa kolom Photo #.` });
       const hint = (tag + " " + Object.values(a).join(" ")).toLowerCase();
       layers.push({ ...base, type: "photo-slot", photoOrder: hasNum ? n : seq, shapeKind: /ellipse|circle|oval/.test(hint) ? "circle" : /round/.test(hint) ? "rounded" : "rectangle" });
-      report.push({ level: "warn", text: `Layer foto "${name}" diimpor berdasarkan perkiraan format dslrBooth — periksa posisi & nomornya.` });
-    } else if (lt.includes("text")) {
+    } else if (lt === "text") {
+      // dslrBooth tidak menyimpan ukuran huruf: huruf mengikuti tinggi kotak (~0,88 x tinggi, diukur dari preview.png), rata tengah
       layers.push({
-        ...base, type: "text", text: first(a, ["Text", "Content"]) ?? "", fontSize: Math.round(num(first(a, ["FontSize", "Size"]), 48)),
-        color: hexFromArgb(first(a, ["Foreground", "FontColor", "TextColor", "Color"]), "#000000"), fontFamily: first(a, ["FontFamily", "Font"]) || "sans-serif",
-        bold: /bold/i.test(String(first(a, ["FontWeight", "Bold"]))), italic: /italic/i.test(String(first(a, ["FontStyle", "Italic"]))),
-        align: /right/i.test(a.textalignment || "") ? "right" : /left/i.test(a.textalignment || "") ? "left" : "center",
+        ...base, type: "text", text: a.text ?? "", fontSize: Math.max(8, Math.round(h * 0.88)),
+        color: hexFromArgb(a.fontcolor, "#000000"), fontFamily: a.fontname || "sans-serif",
+        bold: isTrue(a.isbold), italic: isTrue(a.isitalic), align: "center",
       });
-      report.push({ level: "warn", text: `Teks "${name}" diimpor berdasarkan perkiraan format dslrBooth — periksa ukuran & font.` });
-    } else if (/(rect|ellipse|circle|shape)/.test(lt)) {
-      layers.push({ ...base, type: "shape", shapeKind: /ellipse|circle/.test(lt) ? "circle" : "rectangle", fillColor: hexFromArgb(first(a, ["Fill", "FillColor", "Background"]), "#FF3E8E") });
-      report.push({ level: "warn", text: `Bentuk "${name}" diimpor berdasarkan perkiraan format dslrBooth — periksa tampilannya.` });
+    } else if (["rectangle", "ellipse", "line"].includes(lt)) {
+      const fillRaw = String(a.backgroundcolor ?? "");
+      const clear = /^#?00/i.test(fillRaw) && fillRaw.replace("#", "").length === 8;
+      const thick = num(a.thickness, 0);
+      const shape = {
+        ...base, type: "shape", shapeKind: lt === "ellipse" ? "circle" : "rectangle",
+        fillColor: clear ? "transparent" : hexFromArgb(fillRaw, "#FFFFFF"), strokeColor: hexFromArgb(a.color, "#000000"), strokeWidth: thick,
+      };
+      if (lt === "line") { // garis = batang selebar kotak, setebal Thickness, di Top (cocok dengan preview dslrBooth)
+        shape.heightPct = (Math.max(1, thick) / H) * 100; shape.fillColor = hexFromArgb(a.color, "#000000"); shape.strokeWidth = 0;
+      }
+      layers.push(shape);
+    } else if (lt === "star") {
+      report.push({ level: "warn", text: `Bentuk bintang "${name}" belum ada di POPSNAP dan dilewati.` });
     } else {
       report.push({ level: "warn", text: `Layer "${name}" bertipe <${tag}> belum didukung dan dilewati.` });
     }

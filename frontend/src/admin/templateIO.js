@@ -66,6 +66,7 @@ export async function buildZipExport(doc, { favorite = false } = {}) {
       copy.imageFile = fileName;
       delete copy.imageUrl;
     }
+    if (l.type === "photo-slot" || l.type === "text" || l.type === "shape") entries.push({ layer: l, fileName: null }); // ikut ditulis ke template.xml (format <Photo>/<Text>/bentuk terverifikasi dari contoh asli)
     nativeLayers.push(copy);
   }
 
@@ -82,9 +83,9 @@ export async function buildZipExport(doc, { favorite = false } = {}) {
   ];
 
   const notes = [];
-  const other = layers.filter((l) => l.type !== "image");
-  if (other.length) notes.push(`${other.length} layer non-gambar (foto/teks/bentuk) hanya tersimpan di popsnap.json, tidak di template.xml.`);
-  if (layers.some((l) => l.type === "image" && l.rotation)) notes.push("Rotasi layer gambar tidak ditulis ke template.xml.");
+  if (layers.some((l) => l.type === "shape" && l.shapeKind === "rounded")) notes.push("Bentuk 'rounded' ditulis sebagai kotak biasa (dslrBooth tidak punya sudut membulat).");
+  if (layers.some((l) => l.type === "shape" && l.rotation)) notes.push("Rotasi bentuk tidak ditulis ke template.xml (belum ada contoh dslrBooth).");
+  if (layers.some((l) => l.type === "text" && l.align && l.align !== "center")) notes.push("Teks rata kiri/kanan ditulis rata tengah (dslrBooth selalu rata tengah).");
   return { blob: writeZip(ordered), filename: exportFileName(meta), notes };
 }
 
