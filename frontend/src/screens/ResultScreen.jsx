@@ -322,9 +322,31 @@ export default function ResultScreen({ session, dispatch }) {
             {printMsg && <p style={{ left: U(cx - 300), top: U(y + bh + 14), width: U(600), margin: 0, textAlign: "center", fontSize: U(24), fontStyle: "italic", fontWeight: 700, color: printMsg.err ? "#ffd0d0" : "#fff", textShadow: "0 1px 3px rgba(0,0,0,.4)" }}>{printMsg.t}</p>}
           </>);
         })()}
-        {offline && sharing.mode !== "preview" && (
-          <p style={{ left: U(CW / 2 - 420), top: U(doneY + (sharing.hideDone ? 0 : 64) + 24), width: U(840), margin: 0, textAlign: "center", fontSize: U(P(30, 32)), fontStyle: "italic", fontWeight: 700, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,.4)" }}>{sharing.offlineText || "Foto Anda akan dikirim oleh tim kami lewat WhatsApp."}</p>
-        )}
+        {sharing.thanksOn !== false && !(previewOnly && error) && !printMsg && (() => {
+          const both = sharing.thanksLang === "both";
+          const side = shape === "landscape" && previewOnly; // layar lebar: teks di samping kartu hasil (di bawah tombol Done tidak muat)
+          const sideX = cardF.x + cardF.w + 50;
+          // Mode QR: ucapan di bawah tombol Finish. Layar tegak sisa ruangnya sempit -> hanya judul ucapan, satu baris.
+          const qrMode = !previewOnly;
+          const qrCx = PANEL.x + PANEL.w / 2, qrW = Math.min(820, 2 * (CW - qrCx) - 30, 2 * qrCx - 30), qrTop = P(885, 1676, 954) + P(69, 64) + 16;
+          const slim = qrMode && shape !== "landscape";
+          const OLD_OFF = "Koneksi internet sedang terputus. Foto Anda akan dikirim oleh tim kami lewat WhatsApp.";
+          const msg = offline ? (!sharing.offlineText || sharing.offlineText === OLD_OFF ? "Koneksi internet sedang terputus. Hasil foto akan kami kirim melalui WhatsApp." : sharing.offlineText) : (sharing.thanksText ?? "");
+          const msgEn = offline ? sharing.offlineTextEn : sharing.thanksTextEn;
+          const shadow = "0 1px 3px rgba(0,0,0,.4)";
+          return (
+            <div style={{ ...(side ? { left: U(sideX), top: U(cardF.y + cardF.h / 2 - 90), width: U(CW - 40 - sideX) } : qrMode ? { left: U(qrCx - qrW / 2), top: U(qrTop), width: U(qrW) } : { left: U(CW / 2 - 440), top: U(belowY + 8 + (animating && previewOnly ? 40 : 0)), width: U(880) }), textAlign: "center", color: "#fff", textShadow: shadow, display: "flex", flexDirection: "column", gap: U(6) }}>
+              {sharing.thanksTitle && <p style={{ margin: 0, fontSize: U(slim ? 28 : P(34, 30)), fontWeight: 800, fontStyle: "italic", whiteSpace: slim ? "nowrap" : undefined }}>{sharing.thanksTitle}</p>}
+              {msg && !slim && !(qrMode && both) && <p style={{ margin: 0, fontSize: U(P(28, 25)), fontWeight: 600 }}>{msg}</p>}
+              {both && !slim && (sharing.thanksTitleEn || (!qrMode && msgEn)) && (
+                <div style={{ marginTop: U(8), opacity: .88 }}>
+                  {sharing.thanksTitleEn && <p style={{ margin: 0, fontSize: U(P(24, 21)), fontWeight: 700, fontStyle: "italic" }}>{sharing.thanksTitleEn}</p>}
+                  {msgEn && !qrMode && <p style={{ margin: 0, fontSize: U(P(22, 19)), fontWeight: 500 }}>{msgEn}</p>}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {previewOnly && error && (
           <div style={{ left: U(CW / 2 - 300), top: U(belowY), width: U(600), textAlign: "center", color: "#fff", fontWeight: 700, fontSize: U(26) }}>
             {error} <button onClick={() => setAttempt((n) => n + 1)} className="strip-btn" style={{ width: U(200), height: U(54), fontSize: U(26), marginLeft: U(12) }}>Coba lagi</button>

@@ -750,7 +750,7 @@ export default function TemplateSlotEditor({ currentUser, onLogout }) {
       </div>
 
       {/* Toolbar */}
-      <div className="relative flex items-center gap-1 px-3 py-2 bg-[#FFFFFF] border-b border-[#D5DCE4]">
+      <div className="relative flex items-center gap-1 px-3 py-2 bg-[#FFFFFF] border-b border-[#D5DCE4] max-[1100px]:flex-wrap max-[1100px]:justify-center max-[1100px]:px-2 max-[1100px]:py-1">
         <ToolbarButton icon="plus" label="New Template" onClick={() => { if (!blockedNoSlot()) setModal("new"); }} />
         <ToolbarButton icon="copy" label="Save as New" onClick={handleSaveAsNew} disabled={!doc} />
         <ToolbarButton icon="save" label={saveState === "saving" ? "Saving..." : "Save"} onClick={() => handleSave()} disabled={!doc || (!dirty && saveState !== "saving")} />
@@ -759,7 +759,7 @@ export default function TemplateSlotEditor({ currentUser, onLogout }) {
         <ToolbarButton icon="printer" label="Print Test Copy" onClick={handlePrintTest} disabled={!doc} />
         <ToolbarButton icon="trash" label="Delete Template" onClick={handleDeleteTemplate} disabled={!doc} />
 
-        <div className="flex-1 flex flex-col items-center gap-1 min-w-0">
+        <div className="flex-1 flex flex-col items-center gap-1 min-w-0 max-[1100px]:order-last max-[1100px]:basis-full max-[1100px]:flex-none max-[1100px]:flex-row max-[1100px]:justify-center max-[1100px]:gap-3">
           <TemplatePicker
             templates={templates} categories={categories} activeId={activeId} live={doc} isFavorite={isFavorite} dirty={dirty} disabled={!doc}
             onSelect={requestOpenTemplate} onToggleFavorite={toggleFavorite} onToggleFavoriteOf={toggleFavoriteOf}
@@ -771,9 +771,9 @@ export default function TemplateSlotEditor({ currentUser, onLogout }) {
           </div>
         </div>
 
-        <button onClick={() => goTo("/")} className="flex flex-col items-center gap-1 px-5 py-2 bg-[#E8EEF4] border border-[#C7D0DA] text-[#181B23] hover:text-[#E02843]">
+        <button onClick={() => goTo("/")} className="flex flex-col items-center gap-1 px-5 py-2 max-[1100px]:px-3 max-[1100px]:py-1 bg-[#E8EEF4] border border-[#C7D0DA] text-[#181B23] hover:text-[#E02843]">
           <Icon name="camera" size={26} />
-          <span>Open Photo Booth</span>
+          <span className="whitespace-nowrap max-[1100px]:text-[12px]">Open Photo Booth</span>
         </button>
       </div>
 
@@ -786,7 +786,7 @@ export default function TemplateSlotEditor({ currentUser, onLogout }) {
 
       <div className="flex-1 flex min-h-0">
         {/* ============ KIRI ============ */}
-        <div className="w-[280px] flex-shrink-0 bg-[#FFFFFF] border-r border-[#D5DCE4] overflow-y-auto">
+        <div className="w-[280px] max-[1100px]:w-[210px] max-[820px]:w-[170px] flex-shrink-0 bg-[#FFFFFF] border-r border-[#D5DCE4] overflow-y-auto">
           <PanelHeader>ADD</PanelHeader>
           <div className="px-3 pb-3 flex flex-col gap-2">
             <AddButton icon="image" label="Image" disabled={!doc} onClick={() => imageInputRef.current.click()} />
@@ -893,7 +893,7 @@ export default function TemplateSlotEditor({ currentUser, onLogout }) {
         </div>
 
         {/* ============ KANAN ============ */}
-        <div className="w-[310px] flex-shrink-0 bg-[#FFFFFF] border-l border-[#D5DCE4] overflow-y-auto">
+        <div className="w-[310px] max-[1100px]:w-[240px] max-[820px]:w-[190px] flex-shrink-0 bg-[#FFFFFF] border-l border-[#D5DCE4] overflow-y-auto">
           <PanelHeader>INFO</PanelHeader>
           <div className="px-3 pb-3 grid grid-cols-[52px_14px_1fr_14px_1fr] items-center gap-x-2 gap-y-2">
             <span className="text-[#262A38]">Position</span>

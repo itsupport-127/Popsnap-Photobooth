@@ -170,7 +170,7 @@ export default function MediaCaptureScreen({ session, dispatch }) {
         {stage === "error" && (
           <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-4 p-6 text-center">
             <p className="font-bold text-lg" style={{ color: "#FFD9DE" }}>{error}</p>
-            <button onClick={() => dispatch({ type: "CANCEL_SESSION" })} className="btn-pop btn-flash px-8 py-3">Kembali ke Awal</button>
+            <button onClick={() => dispatch({ type: "CANCEL_SESSION" })} className="btn-back">↩ Kembali ke Awal</button>
           </div>
         )}
       </div>

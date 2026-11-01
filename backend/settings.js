@@ -90,13 +90,18 @@ const DEFAULTS = {
       triggerKeys: true,           // Spasi, S, PageUp, PageDown, F13 = Start
     },
     capture: {
+      manualScope: "all",          // (hanya jika manualTrigger nyala) "all" = tiap foto diketuk; "first" = ketuk sekali di foto pertama, sisanya otomatis
+      captureHint: "pulse",        // animasi penanda tombol potret: pulse (membesar-mengecil) | bounce (melompat) | wiggle (bergoyang) | off
       manualTrigger: true,         // true = tamu mengetuk layar/tombol dulu, baru hitung mundur -> jepret (tiap foto). false = pakai Automatic Sequence
       autoSequence: true,          // (hanya jika manualTrigger mati) hitung mundur -> jepret -> tampilkan -> foto berikutnya, otomatis
       countdownFirst: 5, countdownOthers: 3, displayPhotoSeconds: 2, countdownColor: "#FFFFFF",
       cropLiveview: true, hideCancel: false, showThumbnails: true, thumbnailLocation: "bottom",
       sayCheeseImage: "",
     },
-    sharing: { mode: "qr", hideDone: false, iconsLocation: "right", showLabels: true, offline: "auto", offlineText: "Koneksi internet sedang terputus. Foto Anda akan dikirim oleh tim kami lewat WhatsApp." }, // offline: auto = tanpa QR bila internet mati | force = selalu tanpa QR | off = tetap tampilkan QR
+    sharing: { mode: "qr", hideDone: false, iconsLocation: "right", showLabels: true, offline: "auto", offlineText: "Koneksi internet sedang terputus. Hasil foto akan kami kirim melalui WhatsApp.",
+      thanksOn: true, thanksLang: "id", // ucapan di layar akhir; thanksLang: "id" = Indonesia saja, "both" = Indonesia + Inggris
+      thanksTitle: "Terima kasih telah berfoto di Popsnap", thanksText: "Semoga harimu menyenangkan. Sampai jumpa kembali.",
+      thanksTitleEn: "Thank you for taking photos at Popsnap", thanksTextEn: "Have a great day. See you again soon.", offlineTextEn: "Internet connection is down. Your photos will be sent to you via WhatsApp." }, // offline: auto = tanpa QR bila internet mati | force = selalu tanpa QR | off = tetap tampilkan QR
     // Tombol kunci (gembok) -> PIN. Muncul di SEMUA layar booth, bukan hanya layar Start.
     lock: {
       position: "top-right",   // top-left | top-right | bottom-left | bottom-right
@@ -368,6 +373,8 @@ function update(patch) {
     const cp = obj(d.capture), ccp = cd.capture;
     nd.capture = {
       manualTrigger: bool(cp.manualTrigger, ccp.manualTrigger),
+      manualScope: pick(cp.manualScope, ["all", "first"], ccp.manualScope),
+      captureHint: pick(cp.captureHint, ["pulse", "bounce", "wiggle", "off"], ccp.captureHint),
       autoSequence: bool(cp.autoSequence, ccp.autoSequence),
       countdownFirst: num(cp.countdownFirst, 0, 30, ccp.countdownFirst),
       countdownOthers: num(cp.countdownOthers, 0, 30, ccp.countdownOthers),
@@ -379,7 +386,11 @@ function update(patch) {
       sayCheeseImage: cp.sayCheeseImage === undefined ? ccp.sayCheeseImage : upath(cp.sayCheeseImage, ccp.sayCheeseImage),
     };
     const sh = obj(d.sharing), csh = cd.sharing;
-    nd.sharing = { mode: pick(sh.mode, ["qr", "preview"], csh.mode || "qr"), hideDone: bool(sh.hideDone, csh.hideDone), iconsLocation: pick(sh.iconsLocation, ["right", "left", "bottom"], csh.iconsLocation), showLabels: bool(sh.showLabels, csh.showLabels), offline: pick(sh.offline, ["auto", "force", "off"], csh.offline || "auto"), offlineText: sh.offlineText === undefined ? csh.offlineText : str(sh.offlineText, 200, "") };
+    nd.sharing = { mode: pick(sh.mode, ["qr", "preview"], csh.mode || "qr"), hideDone: bool(sh.hideDone, csh.hideDone), iconsLocation: pick(sh.iconsLocation, ["right", "left", "bottom"], csh.iconsLocation), showLabels: bool(sh.showLabels, csh.showLabels), offline: pick(sh.offline, ["auto", "force", "off"], csh.offline || "auto"), offlineText: sh.offlineText === undefined || sh.offlineText === "Koneksi internet sedang terputus. Foto Anda akan dikirim oleh tim kami lewat WhatsApp." ? csh.offlineText : str(sh.offlineText, 200, ""), // teks bawaan lama otomatis diganti yang baru
+      thanksOn: bool(sh.thanksOn, csh.thanksOn), thanksLang: pick(sh.thanksLang, ["id", "both"], csh.thanksLang),
+      thanksTitle: sh.thanksTitle === undefined ? csh.thanksTitle : str(sh.thanksTitle, 100, ""), thanksText: sh.thanksText === undefined ? csh.thanksText : str(sh.thanksText, 200, ""),
+      thanksTitleEn: sh.thanksTitleEn === undefined ? csh.thanksTitleEn : str(sh.thanksTitleEn, 100, ""), thanksTextEn: sh.thanksTextEn === undefined ? csh.thanksTextEn : str(sh.thanksTextEn, 200, ""),
+      offlineTextEn: sh.offlineTextEn === undefined ? csh.offlineTextEn : str(sh.offlineTextEn, 200, "") };
     const lk = obj(d.lock), clk = cd.lock;
     nd.lock = {
       position: pick(lk.position, ["top-left", "top-right", "bottom-left", "bottom-right"], clk.position),

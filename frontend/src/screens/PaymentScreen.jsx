@@ -4,10 +4,11 @@ import { QRCodeSVG } from "qrcode.react";
 import appConfig from "../config/appConfig";
 import useCountdown from "../hooks/useCountdown";
 import { createQrisPayment, checkPaymentStatus, validateVoucher } from "../services/paymentService";
-import { getPublicSettings } from "../services/settingsService";
+import { getPublicSettings, API_BASE } from "../services/settingsService";
 import OnScreenKeyboard from "../components/OnScreenKeyboard";
 import useCodeEntry, { extractCode } from "../hooks/useCodeEntry";
 import StepBadge from "../components/StepBadge";
+import StripNotice from "../components/StripNotice";
 import TemplateDecor from "../components/TemplateDecor";
 import { PAYMENT_ICONS } from "../components/paymentIcons";
 import logo from "../assets/logo-popsnap.png";
@@ -25,6 +26,7 @@ export default function PaymentScreen({ session, dispatch }) {
   const [voucherError, setVoucherError] = useState(null);
   const [qrisData, setQrisData] = useState(null);
   const [qrisError, setQrisError] = useState(null);
+  const [offline, setOffline] = useState(false); // internet booth mati -> QRIS cashless tidak bisa
   const [methods, setMethods] = useState(null); // null = lagi memeriksa; ["voucher"] / ["qris"] / ["voucher","qris"]
   const pollIntervalRef = useRef(null);
   const autoPickedRef = useRef(false);
@@ -33,12 +35,18 @@ export default function PaymentScreen({ session, dispatch }) {
   useEffect(() => {
     let cancelled = false;
     getPublicSettings()
-      .then((s) => !cancelled && setMethods(s.payment.methods))
+      .then((s) => { if (cancelled) return; setMethods(s.payment.methods); if (s.payment.qrisDown) setOffline(true); })
       .catch(() => !cancelled && setMethods(["voucher"]));
     return () => { cancelled = true; };
   }, []);
 
   // Cuma 1 metode aktif -> langsung dipilih, konsumen gak perlu klik apa-apa lagi
+  useEffect(() => {
+    let off = false;
+    fetch(`${API_BASE}/api/online`).then((r) => r.json()).then((d) => { if (!off && d.offline) setOffline(true); }).catch(() => {});
+    return () => { off = true; };
+  }, []);
+
   useEffect(() => {
     if (!methods || methods.length !== 1 || session.paymentMethod || autoPickedRef.current) return;
     autoPickedRef.current = true;
@@ -137,16 +145,14 @@ export default function PaymentScreen({ session, dispatch }) {
   }
 
   if (session.paymentStatus === "expired") {
+    const toTemplates = session.mode === "photo" && !session.autoTemplate;
     return (
-      <div className="kiosk-screen h-full w-full flex flex-col items-center justify-center gap-4 sm:gap-6 p-4 text-center">
-        <p className="display-h2">Waktu pembayaran habis</p>
-        <button
-          onClick={goBack}
-          className="btn-pop btn-flash px-8 sm:px-10 py-3 sm:py-4 text-base sm:text-lg"
-        >
-          {session.mode === "photo" && !session.autoTemplate ? "Kembali Pilih Template" : "Kembali ke Awal"}
-        </button>
-      </div>
+      <StripNotice
+        title="Waktu pembayaran habis"
+        message={toTemplates ? "Tenang, kamu bisa pilih template lagi dan coba bayar ulang." : "Yuk mulai lagi dari awal."}
+        actionLabel={toTemplates ? "Kembali Pilih Template" : "Kembali ke Awal"}
+        onAction={goBack}
+      />
     );
   }
 
@@ -158,6 +164,7 @@ export default function PaymentScreen({ session, dispatch }) {
         remaining={remaining}
         onBack={goBack}
         onQr={handleSelectQris}
+        qrOffline={offline}
         onVoucher={() => dispatch({ type: "SELECT_PAYMENT_METHOD", payload: { method: "voucher" } })}
       />
     );
@@ -172,7 +179,6 @@ export default function PaymentScreen({ session, dispatch }) {
         remaining={remaining}
         onBack={goBack}
         onRetry={handleSelectQris}
-        onUseVoucher={methods?.includes("voucher") ? () => dispatch({ type: "SELECT_PAYMENT_METHOD", payload: { method: "voucher" } }) : null}
       />
     );
   }
@@ -180,6 +186,7 @@ export default function PaymentScreen({ session, dispatch }) {
   if (session.paymentMethod === "voucher") {
     return (
       <PaymentVoucher
+        qrisDown={offline}
         value={voucherInput}
         onChange={(v) => { setVoucherInput(v); setVoucherError(null); }}
         error={voucherError}
@@ -207,7 +214,7 @@ export default function PaymentScreen({ session, dispatch }) {
 // Satuan desain: 1 = 1px pada kanvas 1728x1117 (lihat .strip-screen di index.css)
 const U = (n) => `calc(var(--u) * ${n})`;
 
-function PaymentSelect({ priceText, remaining, onBack, onQr, onVoucher }) {
+function PaymentSelect({ priceText, remaining, onBack, onQr, onVoucher, qrOffline }) {
   const shape = useShape();
   const portrait = shape === "portrait";
   const k = portrait ? 1.13 : 1; // kartu metode lebih besar di layar tegak
@@ -231,11 +238,13 @@ function PaymentSelect({ priceText, remaining, onBack, onQr, onVoucher }) {
         {priceText && <p className="pay-price" style={{ left: U(L.price.left), top: U(L.price.top), width: U(L.price.width), fontSize: U(30) }}>{priceText}</p>}
 
         {cards.map((c) => (
-          <button key={c.key} onClick={c.onClick} className="pay-card" style={{ left: U(c.left), top: U(L.cardTop), width: U(379 * k), height: U(518 * k), borderRadius: U(71 * k) }}>
+          <button key={c.key} onClick={c.onClick} disabled={qrOffline && c.key === "qr"} className="pay-card" style={{ ...(qrOffline && c.key === "qr" ? { opacity: 0.4, filter: "grayscale(.6)" } : null), left: U(c.left), top: U(L.cardTop), width: U(379 * k), height: U(518 * k), borderRadius: U(71 * k) }}>
             <svg className="pay-card__icon" viewBox="0 0 379 518" fill="none" aria-hidden="true" dangerouslySetInnerHTML={{ __html: c.icon }} />
             <span className="pay-card__label" style={{ left: U(32 * k), bottom: U(28.7 * k), width: U(318.3 * k), height: U(64.2 * k), fontSize: U(41 * k) }}>{c.label}</span>
           </button>
         ))}
+
+        {qrOffline && <p className="pay-price" style={{ left: U(L.price.left), top: U(L.cardTop + 518 * k + 36), width: U(L.price.width), fontSize: U(30), lineHeight: 1.3 }}>QRIS cashless tidak dapat digunakan saat ini.<br />Silakan hubungi CS untuk bantuan pembayaran.</p>}
 
         <button onClick={onBack} className="strip-btn" style={{ left: U(L.back.left), top: U(L.back.top), width: U(192), height: U(63), fontSize: U(30) }}>BACK</button>
       </div>
@@ -299,7 +308,8 @@ function PaymentQr({ qrisData, qrisError, paid, remaining, onBack, onRetry, onUs
         </>
       ) : qrisError ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center" style={{ padding: `0 ${U(60)}`, gap: U(22) }}>
-          <p className="font-bold text-[#E02843]" style={{ fontSize: U(32) }}>{qrisError}</p>
+          <p className="font-bold text-[#E02843]" style={{ fontSize: U(32), lineHeight: 1.25 }}>QRIS cashless tidak dapat digunakan saat ini.<br />Silakan hubungi CS untuk bantuan pembayaran.</p>
+          <p style={{ fontSize: U(20), color: "#8A94A3", margin: 0 }}>{qrisError}</p>
           <div className="flex" style={{ gap: U(16) }}>
             <button onClick={onRetry} className="strip-btn" style={{ width: U(180), height: U(60), fontSize: U(28), position: "static" }}>Coba lagi</button>
             {onUseVoucher && <button onClick={onUseVoucher} className="strip-btn strip-btn--next" style={{ width: U(220), height: U(60), fontSize: U(28), position: "static" }}>Pakai voucher</button>}
@@ -323,7 +333,7 @@ function PaymentQr({ qrisData, qrisError, paid, remaining, onBack, onRetry, onUs
 }
 
 // Layar "Input your voucher here"
-function PaymentVoucher({ value, onChange, error, onSubmit, onBack, remaining, inputRef, useKeyboard, kbMode, onPaste, pasteMsg }) {
+function PaymentVoucher({ qrisDown, value, onChange, error, onSubmit, onBack, remaining, inputRef, useKeyboard, kbMode, onPaste, pasteMsg }) {
   const showWinKb = kbMode === "windows" && window.electronAPI?.kiosk?.showTouchKeyboard;
   const shape = useShape();
   const portrait = shape === "portrait";
@@ -352,6 +362,7 @@ function PaymentVoucher({ value, onChange, error, onSubmit, onBack, remaining, i
       onBack={onBack}
       below={
         <>
+          {qrisDown && <p className="pay-price" style={{ left: U(V.panel.left), top: U(V.titleBox.top - 128), width: U(V.panel.w), fontSize: U(30), lineHeight: 1.3 }}>QRIS cashless tidak dapat digunakan saat ini.<br />Silakan hubungi CS untuk bantuan pembayaran.</p>}
           <button onClick={onSubmit} className="strip-btn" style={{ left: U(V.next.left), top: U(V.next.top), width: U(179), height: U(62), fontSize: U(30) }}>NEXT</button>
           <button onClick={onPaste} className="pay-mini" style={{ left: U(pasteLeft), top: U(V.paste.top), width: U(141), height: U(38), fontSize: U(22) }}>📋 Tempel</button>
           {showWinKb && <button onClick={() => window.electronAPI.kiosk.showTouchKeyboard()} className="pay-mini" style={{ left: U(pasteLeft + 161), top: U(V.kbBtn.top), width: U(180), height: U(38), fontSize: U(22) }}>⌨ Keyboard</button>}

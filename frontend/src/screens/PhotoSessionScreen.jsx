@@ -80,12 +80,16 @@ export default function PhotoSessionScreen({ session, dispatch }) {
 
   const { remaining, addSeconds } = useCountdown(appConfig.timers.photoSession, () => setShowTimeoutPopup(true), needed);
 
+  // Mode ketuk: "all" = tiap foto diketuk; "first" = ketuk sekali di foto pertama (atau saat retake), sisanya otomatis
+  const scopeFirst = cap.manualTrigger !== false && cap.manualScope === "first";
+  const manualNow = cap.manualTrigger !== false && (!scopeFirst || session.shots.length === 0 || session.retakeAt != null);
+  const hint = cap.captureHint ?? "pulse";
   const seq = useShotSequence({
     active: camera.ready && !paused,
     needed,
     shotCount: session.shots.length,
-    manual: cap.manualTrigger !== false,
-    autoSequence: cap.autoSequence !== false,
+    manual: manualNow,
+    autoSequence: cap.autoSequence !== false || scopeFirst,
     autoTrigger: s.camera?.autoTrigger !== false,
     countdownFirst: cap.countdownFirst ?? 5,
     countdownOthers: cap.countdownOthers ?? 3,
@@ -195,7 +199,7 @@ export default function PhotoSessionScreen({ session, dispatch }) {
   // Ketuk layar kamera / tombol bulat.
   //  - Mode manual: ketuk = mulai hitung mundur (kamera melebar penuh layar), lalu jepret. Ketukan saat hitung mundur diabaikan.
   //  - Mode otomatis (lama): ketuk = potret sekarang (melewati sisa hitung mundur).
-  const manual = cap.manualTrigger !== false;
+  const manual = manualNow;
   const waiting = seq.phase === "idle" || seq.phase === "await";
   const canTap = camera.ready && needed && !busyPhase && !reviewing && !paused;
   const tap = () => {
@@ -212,11 +216,12 @@ export default function PhotoSessionScreen({ session, dispatch }) {
   const timerText = fmtT(reviewing ? Math.max(0, reviewLeft) : remaining);
 
   // Pratinjau akhir: ukuran tile
-  const rvCols = portrait ? 2 : Math.ceil(totalShots / 2);
+  const rvCols = portrait ? 2 : shape === "square" ? (totalShots <= 4 ? 2 : 3) : Math.ceil(totalShots / 2); // persegi: kolom lebih sedikit supaya foto tidak mungil
   const rvRows = Math.ceil(totalShots / rvCols);
   const RV = { landscape: { px: 227, py: 110, pw: FW, ph: 840, tx: 245, ty: 128, tw: FW - 36, th: 804, ttl: { left: 552, top: 40 }, next: { left: 1534, top: 968 } },
     portrait: { px: 60, py: 200, pw: 960, ph: 1330, tx: 78, ty: 218, tw: 924, th: 1294, ttl: { left: 228, top: 120 }, next: { left: 832, top: 1716 } },
-    square: { px: 100, py: 120, pw: 1000, ph: 980, tx: 118, ty: 138, tw: 964, th: 944, ttl: { left: 288, top: 40 }, next: { left: 420, top: 1098 } } }[shape];
+    square: { px: 100, py: 120, pw: 1000, ph: 960, tx: 118, ty: 138, tw: 964, th: 924, ttl: { left: 288, top: 36 }, next: { left: 338, top: 1111 } } }[shape];
+  const sqRv = shape === "square" && reviewing; // pratinjau akhir di layar persegi: baris bawah dirapatkan (Take | NEXT | Mirror | Retake) agar tidak saling menimpa
   const rvTile = fit(aspect || 1.5, (RV.tw - 120 - (rvCols - 1) * 30) / rvCols, (RV.th - 120 - (rvRows - 1) * 34) / rvRows - 54);
 
   return (
@@ -257,7 +262,7 @@ export default function PhotoSessionScreen({ session, dispatch }) {
           </div>
         )}
         {canTap && waiting && seq.phase === "idle" && !fullscreen && (
-          <p className="sess-hint" style={{ fontSize: U(28), bottom: U(40) }}>{manual ? "Ketuk layar atau tombol ● untuk mulai potret" : "Ketuk layar atau tombol ● untuk potret sekarang"}</p>
+          <p className="sess-hint" style={{ fontSize: U(28), bottom: U(40) }}>{manual ? (scopeFirst ? "Ketuk layar atau tombol ● sekali — sisanya otomatis" : "Ketuk layar atau tombol ● untuk mulai potret") : "Ketuk layar atau tombol ● untuk potret sekarang"}</p>
         )}
       </div>
 
@@ -304,15 +309,15 @@ export default function PhotoSessionScreen({ session, dispatch }) {
         <div className="pay-timer" role="timer" style={{ left: U(V(1341, 859, 979)), top: U(V(14, 24, 20)), width: U(161), height: U(56), fontSize: U(40) }}>{timerText}</div>
 
         {/* Baris bawah (desain): Take | logo | Retake */}
-        <div className="pay-timer" style={{ left: U(V(228, 60, 60)), top: U(V(995, 1620, 1100)), height: U(64), padding: `0 ${U(32)}`, fontSize: U(34), fontWeight: 700 }}>Take : {taken}/{totalShots}</div>
+        <div className="pay-timer" style={{ left: U(V(228, 60, sqRv ? 40 : 60)), top: U(V(995, 1620, sqRv ? 1112 : 1100)), height: U(64), padding: `0 ${U(32)}`, fontSize: U(34), fontWeight: 700 }}>Take : {taken}/{totalShots}</div>
         {/* Logo di atas (tengah, di antara Batal dan timer); saat pratinjau akhir kembali ke bawah karena judul menempati atas */}
         <img src={logo} alt="PopSnap" draggable={false} className="strip-logo"
-          style={stacked ? { left: U(V(0, 450, 510)), top: U(14), width: U(180) } : reviewing ? { left: U(774), top: U(1000), width: U(180) } : { left: U(774), top: U(10), width: U(180) }} />
-        <div className="pay-timer" style={{ right: U(V(226, 60, 60)), top: U(V(995, 1620, 1100)), height: U(64), padding: `0 ${U(34)}`, fontSize: U(34), fontWeight: 700 }}>Retake : {session.retakesUsed}/{maxRetakes}</div>
+          style={sqRv ? { display: "none" } : stacked ? { left: U(V(0, 450, 510)), top: U(14), width: U(180) } : reviewing ? { left: U(774), top: U(1000), width: U(180) } : { left: U(774), top: U(10), width: U(180) }} />
+        <div className="pay-timer" style={{ right: U(V(226, 60, sqRv ? 40 : 60)), top: U(V(995, 1620, sqRv ? 1112 : 1100)), height: U(64), padding: `0 ${U(34)}`, fontSize: U(34), fontWeight: 700 }}>Retake : {session.retakesUsed}/{maxRetakes}</div>
 
 
         {/* Mirror / No Mirror: tamu memilih tampilan kamera & hasil fotonya (masih bisa diubah lagi di editor) */}
-        <div role="group" aria-label="Mirror" style={{ left: U(V(982, 422, 660)), top: U(V(999, 1716, 1070)), width: U(236), height: U(56), borderRadius: U(28), background: "#DBDBDB", border: "1px solid #000", overflow: "hidden", zIndex: 3 }}>
+        <div role="group" aria-label="Mirror" style={{ left: U(V(982, 422, sqRv ? 581 : 660)), top: U(V(999, 1716, sqRv ? 1116 : 1070)), width: U(236), height: U(56), borderRadius: U(28), background: "#DBDBDB", border: "1px solid #000", overflow: "hidden", zIndex: 3 }}>
           <div style={{ position: "absolute", top: 0, height: "100%", borderRadius: U(28), background: "#E02843", transition: "left .2s ease, width .2s ease", left: mirror ? 0 : U(92), width: mirror ? U(104) : U(144) }} />
           {[[true, "Mirror", 0, 104], [false, "No Mirror", 92, 144]].map(([val, label, x, w]) => (
             <button key={label} type="button" aria-pressed={mirror === val} onClick={() => dispatch({ type: "SET_MIRROR", payload: { mirror: val } })}
@@ -322,7 +327,7 @@ export default function PhotoSessionScreen({ session, dispatch }) {
 
         {/* Tombol potret bulat: di bawah bingkai kamera dengan jarak, tidak menimpa */}
         {!reviewing && (
-          <button onClick={tap} disabled={!canTap || seq.phase === "countdown"} aria-label="Potret" className="sess-capture" style={{ left: U(V(809, 485, 520)), top: U(V(980, 1580, 1040)), width: U(110), height: U(110) }}>
+          <button onClick={tap} disabled={!canTap || seq.phase === "countdown"} aria-label="Potret" className={`sess-capture${canTap && waiting && hint !== "off" ? ` sess-capture--${hint}` : ""}`} style={{ left: U(V(809, 485, 520)), top: U(V(980, 1580, 1040)), width: U(110), height: U(110) }}>
             <Camera aria-hidden="true" strokeWidth={2.2} color="#E02843" style={{ width: U(54), height: U(54) }} />
           </button>
         )}

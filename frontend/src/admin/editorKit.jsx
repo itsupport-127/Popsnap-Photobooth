@@ -162,7 +162,7 @@ export function NumInput({ value, onCommit, step = 1, min, disabled, className =
 export function ToolbarButton({ icon, label, onClick, disabled, active }) {
   return (
     <button onClick={onClick} disabled={disabled}
-      className={`flex flex-col items-center gap-1 px-2.5 py-1 text-[13px] hover:text-[#E02843] disabled:opacity-30 disabled:hover:text-[#262A38] ${active ? "text-[#181B23]" : "text-[#262A38]"}`}>
+      className={`flex flex-col items-center gap-1 px-2.5 max-[1100px]:px-1.5 py-1 text-[13px] max-[1100px]:text-[11px] hover:text-[#E02843] disabled:opacity-30 disabled:hover:text-[#262A38] ${active ? "text-[#181B23]" : "text-[#262A38]"}`}>
       <Icon name={icon} size={26} />
       <span className="whitespace-nowrap">{label}</span>
     </button>
