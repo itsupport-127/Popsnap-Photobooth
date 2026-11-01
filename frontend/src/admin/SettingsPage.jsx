@@ -72,7 +72,7 @@ export default function SettingsPage() {
         let any = false;
         if (!words.length) { rows.forEach((r) => { r.style.display = ""; }); card.style.display = ""; return; }
         const headHit = match(head);
-        rows.forEach((r) => { const hit = headHit || match(r.textContent || ""); r.style.display = hit ? "" : "none"; any = any || hit; });
+        rows.forEach((r) => { const label = r.firstElementChild?.textContent || ""; const hint = r.querySelector(":scope > div:last-child > p:last-child")?.textContent || ""; const hit = headHit || match(label + " " + hint); r.style.display = hit ? "" : "none"; any = any || hit; });
         const show = headHit || any;
         card.style.display = show ? "" : "none";
         if (show) groupHits++;
