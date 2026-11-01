@@ -23,7 +23,8 @@ const SLIDERS = [
 
 const MAX_FILTERS = 24;
 
-export default function SettingsFilters({ s, set }) {
+export default function SettingsFilters({ s, set, only }) {
+  const vis = (t) => !only || only.includes(t); // tampilkan hanya kartu yang diminta halaman Pengaturan (pengelompokan baru)
   const list = s.editor?.filters ?? DEFAULT_FILTERS;
   const [open, setOpen] = useState(null);
   const save = (next) => set(["editor"], { ...(s.editor ?? {}), filters: next });
@@ -76,6 +77,7 @@ export default function SettingsFilters({ s, set }) {
 
   return (
     <>
+      {vis("Filter foto") && (
       <Card title="Filter foto" hint="Filter yang bisa dipilih tamu di layar Pilih & Edit Foto. “No Filter” selalu ada di urutan pertama. Tambah, ubah nama, atur efeknya, urutkan, atau matikan sesuai kebutuhan.">
         <div className="flex flex-col gap-2">
           {list.map((f, i) => {
@@ -132,7 +134,7 @@ export default function SettingsFilters({ s, set }) {
         </div>
         {importErr && <div className="mt-2"><Notice tone="error">{importErr}</Notice></div>}
         <p className="text-[12px] text-[#6B7684] mt-2">LUT .cube = format standar warna (DaVinci Resolve, Lightroom, Photoshop, dll). Bisa pilih banyak file sekaligus; dukung LUT 3D (disarankan) dan 1D. {list.length}/{MAX_FILTERS} filter. Jangan lupa tekan “Simpan” di bawah. Kalau lebih dari 6 filter aktif, daftar di layar tamu bisa digulir.</p>
-      </Card>
+      </Card>)}
       <Notice tone="info">Filter yang sama dipakai untuk pratinjau di layar dan hasil akhir (cetak/unduh), jadi tampilannya selalu sama.</Notice>
     </>
   );

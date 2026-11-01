@@ -28,7 +28,8 @@ function Alignment({ s, set, which, label }) {
   );
 }
 
-export default function SettingsPrinting({ s, set }) {
+export default function SettingsPrinting({ s, set, only }) {
+  const vis = (t) => !only || only.includes(t); // tampilkan hanya kartu yang diminta halaman Pengaturan (pengelompokan baru)
   const pr = s.printing;
   const [printers, setPrinters] = useState([]);
   const [err, setErr] = useState(null);
@@ -60,6 +61,7 @@ export default function SettingsPrinting({ s, set }) {
 
   return (
     <>
+      {vis("CETAK (PRINTING)") && (
       <Card title="CETAK (PRINTING)" hint="Mencetak hasil foto ke printer yang dikenal Windows. Bisa printer yang dicolok ke PC booth ini, atau printer PC lain yang di-share lewat jaringan.">
         <Row label="Aktifkan cetak"><Check checked={pr.enabled} onChange={(x) => set(["printing", "enabled"], x)} label="Aktifkan fitur cetak di booth" /></Row>
         {err && <Notice tone="info">{err}</Notice>}
@@ -84,8 +86,9 @@ export default function SettingsPrinting({ s, set }) {
           </div>
         </Row>
         {pr.second.name && <Alignment s={s} set={set} which="second" label="PRINTER KEDUA" />}
-      </Card>
+      </Card>)}
 
+      {vis("PERILAKU CETAK") && (
       <Card title="PERILAKU CETAK">
         <Row label="Cetak otomatis" hint="Hasil langsung dicetak begitu sesi selesai, tanpa tamu menekan apa pun (sudah termasuk harga sesi)."><Check checked={pr.auto} onChange={(x) => set(["printing", "auto"], x)} label="Langsung cetak saat hasil keluar" /></Row>
         {pr.auto && <Row label="Salinan otomatis" hint="1–3 salinan."><N value={pr.autoCopies} min={1} onCommit={(x) => set(["printing", "autoCopies"], Math.min(3, x))} /></Row>}
@@ -106,7 +109,7 @@ export default function SettingsPrinting({ s, set }) {
         <Row label="Ketajaman cetak" hint="Mempertajam gambar akhir sebelum dicetak."><Select value={pr.sharpening} onChange={(x) => set(["printing", "sharpening"], x)} options={[["none", "Tidak ada"], ["low", "Rendah"], ["medium", "Sedang"], ["high", "Tinggi"]]} /></Row>
         <Row label="Cetak 2x6"><Check checked={pr.strip2x6} onChange={(x) => set(["printing", "strip2x6"], x)} label="Template strip 2x6 dicetak dobel berdampingan di kertas 4x6 (lalu dipotong jadi dua)" /></Row>
         <Notice tone="info">Cetak diam-diam (tanpa dialog) hanya jalan di aplikasi desktop POPSNAP. Tombol Simpan di bawah berlaku untuk semua pengaturan di tab ini.</Notice>
-      </Card>
+      </Card>)}
     </>
   );
 }

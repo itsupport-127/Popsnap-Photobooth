@@ -13,7 +13,8 @@ const MODES = [
 ];
 const rupiah = (n) => `Rp ${Number(n || 0).toLocaleString("id-ID")}`;
 
-export default function SettingsGeneral({ s, set, pin, setPin, outputDir }) {
+export default function SettingsGeneral({ s, set, pin, setPin, outputDir, only }) {
+  const vis = (t) => !only || only.includes(t); // tampilkan hanya kartu yang diminta halaman Pengaturan (pengelompokan baru)
   const [exportTest, setExportTest] = useState(null);
   const [picker, setPicker] = useState(null); // { title, start, onPick }
   // 1) Aplikasi desktop: dialog bawaan Electron. 2) Browser di PC booth: backend membuka dialog bawaan Windows/macOS/Linux.
@@ -38,6 +39,7 @@ export default function SettingsGeneral({ s, set, pin, setPin, outputDir }) {
 
   return (
     <>
+      {vis("BOOTH MODE") && (
       <Card title="BOOTH MODE" hint="Mode yang tampil sebagai tombol di layar Start. Mode foto selalu aktif.">
         <div className="grid grid-cols-2 gap-x-6 gap-y-4">
           {MODES.map(([id, name, desc, always]) => {
@@ -58,9 +60,10 @@ export default function SettingsGeneral({ s, set, pin, setPin, outputDir }) {
           })}
         </div>
         <Check checked={g.modes.showLabels} onChange={(v) => set(["general", "modes", "showLabels"], v)} label="Tampilkan label teks di bawah ikon" />
-      </Card>
+      </Card>)}
 
-      <Card title="OPTIONS">
+      {vis("KEYBOARD & PIN") && (
+      <Card title="KEYBOARD & PIN">
         <Row label="Virtual Keyboard" hint="Mengetik dari keyboard PC SELALU bisa langsung (tanpa mengklik kolom isian) di semua pilihan ini. Keyboard Windows: di aplikasi desktop, keyboard sentuh Windows dibuka otomatis saat kolom kode voucher tampil.">
           <Select value={g.virtualKeyboard} onChange={(v) => set(["general", "virtualKeyboard"], v)} className="max-w-md"
             options={[["off", "Keyboard fisik / bawaan perangkat (kolom bisa diketuk)"], ["builtin", "Keyboard layar POPSNAP"], ["windows", "Keyboard sentuh Windows"]]} />
@@ -72,8 +75,9 @@ export default function SettingsGeneral({ s, set, pin, setPin, outputDir }) {
           </div>
           {pin.value && pin.value.length < 4 && <p className="text-[12px] text-red-600 mt-1">Minimal 4 angka.</p>}
         </Row>
-      </Card>
+      </Card>)}
 
+      {vis("IZIN FOTO (SOSMED & DIPAJANG DI TOKO)") && (
       <Card title="IZIN FOTO (SOSMED & DIPAJANG DI TOKO)" hint="Layar tambahan setelah pembayaran dan sebelum pengumuman. Hasilnya bisa dilihat di menu Sosmed.">
         <Row label="Izin foto" hint="Setelah bayar (sebelum pengumuman), tamu memilih: Keduanya / Sosmed saja / Mading saja / Tidak. Folder sesi ditandai, dan yang diizinkan disalin ke folder _BOLEH-SOSMED dan/atau _BOLEH-MADING. Tidak dijawab = Tidak."><Check checked={g.consent.enabled} onChange={(v) => set(["general", "consent", "enabled"], v)} label="Tanya izin foto ke tamu" /></Row>
         {g.consent.enabled && (<>
@@ -81,14 +85,16 @@ export default function SettingsGeneral({ s, set, pin, setPin, outputDir }) {
           <Row label="Pertanyaan"><input className={inputCls} maxLength={200} value={g.consent.text} onChange={(e) => set(["general", "consent", "text"], e.target.value)} /></Row>
           <Row label="Batas waktu (detik)" hint="5–120. Lewat batas dianggap Tidak."><div className="w-28"><NumInput value={g.consent.seconds} min={5} onCommit={(v) => set(["general", "consent", "seconds"], Math.round(v))} /></div></Row>
         </>)}
-      </Card>
+      </Card>)}
 
+      {vis("DISCLAIMER") && (
       <Card title="DISCLAIMER" hint="Ditampilkan setelah tamu menekan Start. Kalau tidak setuju, sesi dibatalkan sebelum pembayaran.">
         <Row label="Enable"><Check checked={g.disclaimer.enabled} onChange={(v) => set(["general", "disclaimer", "enabled"], v)} label="Wajibkan tamu menyetujui ketentuan sebelum mulai" /></Row>
         <Row label="Header"><input className={`${inputCls} ${g.disclaimer.enabled ? "" : "opacity-50"}`} maxLength={120} value={g.disclaimer.header} onChange={(e) => set(["general", "disclaimer", "header"], e.target.value)} /></Row>
         <Row label="Text"><textarea rows={5} maxLength={3000} className={`${inputCls} ${g.disclaimer.enabled ? "" : "opacity-50"}`} value={g.disclaimer.text} onChange={(e) => set(["general", "disclaimer", "text"], e.target.value)} /></Row>
-      </Card>
+      </Card>)}
 
+      {vis("DIRECTORIES") && (
       <Card title="DIRECTORIES">
         <Row label="Data Directory" hint="Semua foto & media tersimpan di sini (arsip permanen). Berlaku untuk sesi berikutnya — file lama tidak dipindahkan otomatis.">
           <div className="flex gap-2">
@@ -111,8 +117,9 @@ export default function SettingsGeneral({ s, set, pin, setPin, outputDir }) {
           {exportTest?.ok && <div className="mt-2"><Notice tone="ok">Folder bisa ditulis.</Notice></div>}
           {exportTest?.error && <div className="mt-2"><Notice tone="error">{exportTest.error}</Notice></div>}
         </Row>
-      </Card>
+      </Card>)}
 
+      {vis("ATURAN SESI FOTO") && (
       <Card title="ATURAN SESI FOTO">
         <Row label="Jumlah foto per sesi"><div className="w-28"><NumInput value={s.session.totalShots} min={1} onCommit={(v) => set(["session", "totalShots"], Math.round(v))} /></div></Row>
         <Row label="Batas retake per sesi"><div className="w-28"><NumInput value={s.session.maxRetakes} min={0} onCommit={(v) => set(["session", "maxRetakes"], Math.round(v))} /></div></Row>
@@ -120,12 +127,13 @@ export default function SettingsGeneral({ s, set, pin, setPin, outputDir }) {
         {[["payment", "Pembayaran"], ["photoSession", "Sesi foto"], ["photoSessionExtend", "Tambahan waktu sesi foto"], ["editor", "Editor"]].map(([k, l]) => (
           <Row key={k} label={l}><div className="w-28"><NumInput value={s.session.timers[k]} min={1} onCommit={(v) => set(["session", "timers", k], Math.round(v))} /></div></Row>
         ))}
-      </Card>
+      </Card>)}
 
+      {vis("EVENT") && (
       <Card title="EVENT">
         <Row label="Nama event (judul layar Start)"><input className={inputCls} maxLength={60} value={s.event.name} onChange={(e) => set(["event", "name"], e.target.value)} /></Row>
         <Row label="Subjudul"><input className={inputCls} maxLength={100} value={s.event.subtitle} onChange={(e) => set(["event", "subtitle"], e.target.value)} /></Row>
-      </Card>
+      </Card>)}
       {picker && <FolderPicker title={picker.title} start={picker.start} onClose={() => setPicker(null)} onPick={(d) => { picker.onPick(d); setPicker(null); }} />}
     </>
   );

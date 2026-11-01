@@ -18,7 +18,7 @@ export function Page({ title, subtitle, children, right }) {
 
 export function Card({ title, hint, children, className = "" }) {
   return (
-    <section className={`bg-white border border-[#D5DCE4] rounded-[20px] overflow-hidden shadow-[0_2px_10px_rgba(24,27,35,0.06)] ${className}`}>
+    <section data-card className={`bg-white border border-[#D5DCE4] rounded-[20px] overflow-hidden shadow-[0_2px_10px_rgba(24,27,35,0.06)] ${className}`}>
       {title && (
         <div className="px-4 py-3 border-b border-[#D5DCE4]">
           <h2 className="text-[14px] font-extrabold italic text-[#181B23] tracking-wide">{title}</h2>

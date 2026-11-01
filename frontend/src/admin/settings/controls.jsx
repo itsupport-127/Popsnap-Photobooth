@@ -6,7 +6,7 @@ import { Btn } from "../ui";
 /** Baris pengaturan gaya dslrBooth: label di kiri (rata kanan), kontrol di kanan, keterangan kecil di bawahnya. */
 export function Row({ label, hint, children }) {
   return (
-    <div className="grid grid-cols-[210px_1fr] gap-x-4 items-start py-1.5">
+    <div data-row className="grid grid-cols-[210px_1fr] gap-x-4 items-start py-1.5">
       <div className="text-[13px] text-[#181B23] text-right pt-1.5">{label}</div>
       <div className="min-w-0">
         {children}

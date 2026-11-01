@@ -7,7 +7,8 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000";
 const RES_LABEL = ["640×480 · frame rate tertinggi", "1280×720 (HD)", "1920×1080 (Full HD)", "3840×2160 (4K) · kualitas tertinggi"];
 const RES = [[640, 480], [1280, 720], [1920, 1080], [3840, 2160]];
 
-export default function SettingsCamera({ s, set }) {
+export default function SettingsCamera({ s, set, only }) {
+  const vis = (t) => !only || only.includes(t); // tampilkan hanya kartu yang diminta halaman Pengaturan (pengelompokan baru)
   const c = s.camera;
   const [devices, setDevices] = useState({ video: [], audio: [] });
   const [msg, setMsg] = useState(null);
@@ -79,6 +80,7 @@ export default function SettingsCamera({ s, set }) {
 
   return (
     <>
+      {vis("CAMERA") && (
       <Card title="CAMERA">
         <Row label="Sumber kamera" hint="Webcam = kamera yang terbaca browser. DSLR / mirrorless (Canon, Nikon, dll lewat USB) memakai program digiCamControl — jalan di Chrome maupun aplikasi .exe.">
           <Select value={c.mode} onChange={(v) => set(["camera", "mode"], v)} options={[["webcam", "Webcam / kamera USB (browser)"], ["dslr", "Kamera DSLR / mirrorless (Canon, Nikon, dll via digiCamControl)"]]} className="max-w-md" />
@@ -100,13 +102,13 @@ export default function SettingsCamera({ s, set }) {
             <Btn onClick={detect}>Deteksi ulang</Btn>
           </div>
         </Row>
-        <Row label="Webcam Audio Input" hint="Dipakai mode Video kalau perekaman suara diaktifkan di tab GIF & Video.">
+        <Row label="Webcam Audio Input" hint="Dipakai mode Video kalau perekaman suara diaktifkan di kelompok GIF, Live & Video.">
           <Select value={c.audioDeviceId} onChange={(v) => set(["camera", "audioDeviceId"], v)} options={[["", "(Otomatis)"], ...devices.audio]} />
         </Row>
         {msg && <div className="mt-2"><Notice tone="warn">{msg}</Notice></div>}
-      </Card>
+      </Card>)}
 
-      {c.mode === "dslr" && (
+      {vis("KAMERA DSLR / MIRRORLESS") && c.mode === "dslr" && (
         <Card title="KAMERA DSLR / MIRRORLESS" hint="Kamera seperti Canon EOS & Nikon muncul di Windows sebagai 'Portable Devices', jadi tidak terbaca browser. POPSNAP memakai digiCamControl (gratis) sebagai penghubung.">
           <Row label="Penghubung kamera" hint="digiCamControl = aplikasi gratis terpisah. Canon / Nikon / Sony SDK = program perantara resmi pabrikan, sudah ikut terpasang di aplikasi. Pilih lalu Simpan.">
             <Select value={d.driver ?? "digicam"} onChange={(v) => set(["camera", "dslr", "driver"], v)} options={[["digicam", "digiCamControl"], ["canon", "Canon SDK (EDSDK)"], ["nikon", "Nikon SDK"], ["sony", "Sony SDK (Camera Remote)"]]} className="max-w-xs" />
@@ -160,6 +162,7 @@ export default function SettingsCamera({ s, set }) {
         </Card>
       )}
 
+      {vis("LIVE VIEW") && (
       <Card title="LIVE VIEW" hint="Tampilan kamera saat hitung mundur.">
         <Row label="Enable"><Check checked={lv.enabled} onChange={(v) => set(["camera", "liveView", "enabled"], v)} label="Tampilkan video pratinjau saat hitung mundur" /></Row>
         <Row label="Mirror Image"><Check checked={lv.mirror} onChange={(v) => set(["camera", "liveView", "mirror"], v)} label="Pilihan awal: Mirror (seperti cermin). Tamu bisa memilih Mirror / No Mirror sendiri saat sesi foto & di editor" /></Row>
@@ -197,7 +200,7 @@ export default function SettingsCamera({ s, set }) {
             </div>
           )}
         </Row>
-      </Card>
+      </Card>)}
     </>
   );
 }

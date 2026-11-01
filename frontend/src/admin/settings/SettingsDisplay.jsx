@@ -30,7 +30,8 @@ function LockPreview({ lock }) {
 
 const abs = (u) => (u ? (u.startsWith("http") ? u : `${API_BASE}${u}`) : "");
 
-export default function SettingsDisplay({ s, set, setError }) {
+export default function SettingsDisplay({ s, set, setError, only }) {
+  const vis = (t) => !only || only.includes(t); // tampilkan hanya kartu yang diminta halaman Pengaturan (pengelompokan baru)
   const d = s.display;
   const ss = d.startScreen, cap = d.capture, sh = d.sharing, rm = d.reminder, lk = d.lock;
   const pinSet = s.general.security.pinSet;
@@ -44,19 +45,21 @@ export default function SettingsDisplay({ s, set, setError }) {
 
   return (
     <>
-      <Card title="OPTIONS">
+      {vis("LAYAR PENUH & WARNA") && (
+      <Card title="LAYAR PENUH & WARNA">
         <Row label="Start App in Full Screen" hint="Aplikasi desktop (.exe) dibuka dalam layar penuh.">
           <Check checked={d.startFullscreen} onChange={(v) => set(["display", "startFullscreen"], v)} label="Buka aplikasi dalam layar penuh" />
         </Row>
-        <Row label="Auto Full Screen" hint="Tekan Start atau tombol layar penuh = masuk layar penuh seperti F11. Keluar lewat ikon gembok / F11 (butuh PIN kalau diatur di tab Umum).">
+        <Row label="Auto Full Screen" hint="Tekan Start atau tombol layar penuh = masuk layar penuh seperti F11. Keluar lewat ikon gembok / F11 (butuh PIN kalau diatur di Booth & Event → Keyboard & PIN).">
           <Check checked={d.autoFullscreen} onChange={(v) => set(["display", "autoFullscreen"], v)} label="Masuk layar penuh otomatis saat Start ditekan" />
         </Row>
         <Row label="Background Color" hint="Warna latar layar-layar booth."><Color value={d.colors.background} onChange={(v) => set(["display", "colors", "background"], v)} /></Row>
         <Row label="Primary Color" hint="Tombol utama dan garis."><Color value={d.colors.primary} onChange={(v) => set(["display", "colors", "primary"], v)} /></Row>
         <Row label="Button Font Color" hint="Warna tulisan di tombol utama."><Color value={d.colors.buttonText} onChange={(v) => set(["display", "colors", "buttonText"], v)} /></Row>
         <Row label="Secondary Color" hint="Layar Start (jika tanpa gambar), tombol mode, dan gembok."><Color value={d.colors.secondary} onChange={(v) => set(["display", "colors", "secondary"], v)} /></Row>
-      </Card>
+      </Card>)}
 
+      {vis("START SCREEN") && (
       <Card title="START SCREEN">
         <Row label="Start Screen Image" hint="Latar layar Start. Tidak ditampilkan kalau live view di layar Start aktif."><ImagePicker value={ss.image} onChange={(v) => set(["display", "startScreen", "image"], v)} onError={setError} /></Row>
         <Row label="Stretch">
@@ -80,10 +83,11 @@ export default function SettingsDisplay({ s, set, setError }) {
           <Check checked disabled label="Touch Screen / klik tombol mode" />
           <Check checked={ss.triggerKeys} onChange={(v) => set(["display", "startScreen", "triggerKeys"], v)} label="Tombol Spasi, S, Page Up, Page Down, F13" hint="Berguna untuk tombol fisik / remote presentasi." />
         </Row>
-      </Card>
+      </Card>)}
 
+      {vis("TOMBOL KUNCI (GEMBOK → PIN)") && (
       <Card title="TOMBOL KUNCI (GEMBOK → PIN)" hint="Tombol untuk membuka menu admin / keluar dari layar penuh. Muncul di SEMUA layar booth, tidak hanya layar Start.">
-        {!pinSet && <div className="mb-3"><Notice tone="warn">PIN belum dibuat (tab Umum → Security Pin). Tanpa PIN, siapa pun yang mengetuk gembok langsung diarahkan ke halaman login admin.</Notice></div>}
+        {!pinSet && <div className="mb-3"><Notice tone="warn">PIN belum dibuat (Booth & Event → Keyboard & PIN → Security Pin). Tanpa PIN, siapa pun yang mengetuk gembok langsung diarahkan ke halaman login admin.</Notice></div>}
         <Row label="Posisi" hint="Pilih pojok yang paling jarang tertutup tombol lain.">
           <div className="flex items-start gap-4">
             <div className="grid grid-cols-2 gap-1.5">
@@ -117,8 +121,9 @@ export default function SettingsDisplay({ s, set, setError }) {
         <Row label="Luas area pojok" hint="Area peka untuk mengetuk / menyeret memunculkan gembok (kotak putus-putus pada pratinjau). Tombol lain di pojok tetap bisa ditekan.">
           <div className={lk.style === "always" ? "opacity-40 pointer-events-none" : ""}><Range value={lk.zoneSize} min={60} max={240} step={4} unit=" px" onChange={(v) => set(["display", "lock", "zoneSize"], v)} /></div>
         </Row>
-      </Card>
+      </Card>)}
 
+      {vis("CAPTURE SCREEN") && (
       <Card title="CAPTURE SCREEN">
         <Row label="Manual Trigger" hint="Tamu mengetuk layar atau tombol bulat untuk memotret. Hitung mundur baru dimulai setelah ketukan, dan kamera melebar penuh layar sampai foto diambil. Berlaku untuk setiap foto."><Check checked={cap.manualTrigger !== false} onChange={(v) => set(["display", "capture", "manualTrigger"], v)} label="Foto diambil setelah tamu mengetuk (bukan otomatis)" /></Row>
         <Row label="Trigger Scope" hint="Hanya dipakai kalau Manual Trigger nyala. 'Tiap foto' = tamu mengetuk sebelum setiap foto. 'Foto pertama saja' = tamu mengetuk sekali di awal, foto berikutnya otomatis (hitung mundur → jepret → tampil → lanjut)."><Select value={cap.manualScope ?? "all"} onChange={(v) => set(["display", "capture", "manualScope"], v)} options={[["all", "Tiap foto diketuk"], ["first", "Foto pertama saja, sisanya otomatis"]]} /></Row>
@@ -132,8 +137,9 @@ export default function SettingsDisplay({ s, set, setError }) {
         <Row label="Hide Cancel Button"><Check checked={cap.hideCancel} onChange={(v) => set(["display", "capture", "hideCancel"], v)} label="Sembunyikan tombol Batal saat pengambilan foto" /></Row>
         <Row label="Show Photo Thumbnails"><Check checked={cap.showThumbnails} onChange={(v) => set(["display", "capture", "showThumbnails"], v)} label="Tampilkan thumbnail foto yang sudah diambil (tombol Retake ada di sini)" hint="Kalau dimatikan, tamu tidak bisa retake." /></Row>
         <Row label="Say Cheese Image" hint="Ditampilkan sekejap saat kamera menjepret."><ImagePicker value={cap.sayCheeseImage} onChange={(v) => set(["display", "capture", "sayCheeseImage"], v)} onError={setError} /></Row>
-      </Card>
+      </Card>)}
 
+      {vis("REMINDER SCREEN") && (
       <Card title="REMINDER SCREEN" hint="Layar pengingat setelah pembayaran dan sebelum sesi foto. Mode GIF / Boomerang / Video memakai teks bawaan sendiri.">
         <Row label="Enable"><Check checked={rm.enabled} onChange={(v) => set(["display", "reminder", "enabled"], v)} label="Tampilkan pengingat sebelum sesi dimulai" /></Row>
         <Row label="Durasi tampil" hint="Detik. Setelah habis, sesi dimulai otomatis."><div className="w-24"><NumInput value={rm.seconds} min={2} onCommit={(v) => set(["display", "reminder", "seconds"], Math.max(2, Math.min(60, Math.round(v))))} /></div></Row>
@@ -166,8 +172,9 @@ export default function SettingsDisplay({ s, set, setError }) {
             <ReminderView reminder={previewReminder} items={items.filter((i) => i.text)} vars={{ shots: s.session.totalShots, retakes: s.session.maxRetakes }} timerText={fmtReminderTimer(previewReminder.seconds ?? 8)} />
           </div>
         </Row>
-      </Card>
+      </Card>)}
 
+      {vis("SHARING SCREEN") && (
       <Card title="SHARING SCREEN">
         <Row label="Mode akhir sesi" hint="QR: pelanggan scan QR / ketik kode untuk mengunduh (butuh Galeri cloud). Preview saja: hanya menampilkan hasil + tombol Done + timer, tanpa QR dan tanpa unggah ke cloud (foto tetap tersimpan di PC booth, seperti dslrBooth tanpa sharing). Timer habis = kembali ke layar awal.">
           <Select value={sh.mode ?? "qr"} onChange={(v) => set(["display", "sharing", "mode"], v)} className="max-w-[280px]" options={[["qr", "QR + preview (pelanggan unduh)"], ["preview", "Preview saja (tanpa QR)"]]} />
@@ -189,7 +196,7 @@ export default function SettingsDisplay({ s, set, setError }) {
         <Row label="Hide Done Button" hint="Kalau aktif, satu-satunya cara kembali ke awal adalah timeout (otomatis minimal 5 detik)."><Check checked={sh.hideDone} onChange={(v) => set(["display", "sharing", "hideDone"], v)} label="Sembunyikan tombol Done" /></Row>
         <Row label="Sharing Icons Location"><Select value={sh.iconsLocation} onChange={(v) => set(["display", "sharing", "iconsLocation"], v)} className="max-w-[160px]" options={[["right", "Right"], ["left", "Left"], ["bottom", "Bottom"]]} /></Row>
         <Row label="Show Text Labels"><Check checked={sh.showLabels} onChange={(v) => set(["display", "sharing", "showLabels"], v)} label="Tampilkan teks di samping QR (mis. “Scan untuk download foto”)" /></Row>
-      </Card>
+      </Card>)}
     </>
   );
 }
